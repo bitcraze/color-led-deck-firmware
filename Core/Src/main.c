@@ -18,10 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "color.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#define RXBUFFERSIZE  4
+#include "color.h"
+#include "thermal_control.h"
+#define RXBUFFERSIZE  3
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,15 +35,8 @@ __IO uint32_t     Xfer_Complete = 0;
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* Buffer used for reception */
-uint8_t aRxBuffer[RXBUFFERSIZE];
-uint16_t topLedR;
-uint16_t topLedG;
-uint16_t topLedB;
-uint16_t topLedW;
-uint16_t botLedR;
-uint16_t botLedG;
-uint16_t botLedB;
-uint16_t botLedW;
+uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
+static rgb_t requested_color = {0, 0, 0};
 
 /* USER CODE END PD */
 
@@ -161,10 +157,10 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
-  TIM1->CCR1 = 0; 
-  TIM1->CCR2 = 0; 
+  TIM1->CCR1 = 0;
+  TIM1->CCR2 = 0;
   TIM1->CCR3 = 0;
-  TIM1->CCR4 = 0; 
+  TIM1->CCR4 = 0;
 
   if(HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK)
   {
@@ -182,6 +178,8 @@ int main(void)
 
   while (1)
   {
+    // rgbw_t led_color = {requested_color.r, requested_color.g, requested_color.b, 0};
+    rgbw_t led_color = rgb_to_rgbw_corrected(&requested_color);
 
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
@@ -201,10 +199,10 @@ int main(void)
     //   // Not both at the same time, board can then overheat.
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
-      TIM1->CCR1 = botLedG;
-      TIM1->CCR2 = botLedR;
-      TIM1->CCR3 = botLedB;
-      TIM1->CCR4 = botLedW;
+      TIM1->CCR1 = led_color.g;
+      TIM1->CCR2 = led_color.b;
+      TIM1->CCR3 = led_color.r;
+      TIM1->CCR4 = led_color.w;
     // } else {
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
@@ -543,11 +541,10 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
   // topLedG = aRxBuffer[6]; //Green
   // topLedB = aRxBuffer[5]; //Blue
   // topLedW = aRxBuffer[4]; //White
-  
-  botLedR = aRxBuffer[3]; //Red
-  botLedG = aRxBuffer[2]; //Green
-  botLedB = aRxBuffer[1]; //Blue
-  botLedW = aRxBuffer[0]; //White
+
+  requested_color.r = aRxBuffer[2]; //Red
+  requested_color.g = aRxBuffer[1]; //Green
+  requested_color.b = aRxBuffer[0]; //Blue
 }
 
 /**
