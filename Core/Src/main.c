@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "color.h"
+#include "thermal_control.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -181,6 +182,11 @@ int main(void)
     // rgbw_t led_color = {requested_color.r, requested_color.g, requested_color.b, 0};
     rgbw_t led_color = rgb_to_rgbw_corrected(&requested_color);
 
+    if (thermalShouldCutoff())
+    {
+      // If thermal cutoff is needed, turn off all LEDs
+      led_color = (rgbw_t){0, 0, 0, 0};
+    }
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
     // TIM1->CCR2 = botLedB; //Blue
