@@ -153,6 +153,8 @@ int main(void)
   MX_TIM1_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  initThermalADC();
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -181,12 +183,8 @@ int main(void)
   {
     // rgbw_t led_color = {requested_color.r, requested_color.g, requested_color.b, 0};
     rgbw_t led_color = rgb_to_rgbw_corrected(&requested_color);
+    rgbw_t led_color_temp_limited = thermalLimitColor(led_color);
 
-    if (thermalShouldCutoff())
-    {
-      // If thermal cutoff is needed, turn off all LEDs
-      led_color = (rgbw_t){0, 0, 0, 0};
-    }
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
     // TIM1->CCR2 = botLedB; //Blue
@@ -205,10 +203,10 @@ int main(void)
     //   // Not both at the same time, board can then overheat.
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
-      TIM1->CCR1 = led_color.g;
-      TIM1->CCR2 = led_color.b;
-      TIM1->CCR3 = led_color.r;
-      TIM1->CCR4 = led_color.w;
+      TIM1->CCR1 = led_color_temp_limited.g;
+      TIM1->CCR2 = led_color_temp_limited.b;
+      TIM1->CCR3 = led_color_temp_limited.r;
+      TIM1->CCR4 = led_color_temp_limited.w;
     // } else {
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
@@ -297,7 +295,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_1CYCLE_5;
+  hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_160CYCLES_5;  // Long sampling time for internal channels (VREFINT, TEMPSENSOR)
   hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
   hadc1.Init.OversamplingMode = DISABLE;
   hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
