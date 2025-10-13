@@ -10,12 +10,6 @@
 // ADC handle
 extern ADC_HandleTypeDef hadc1;
 
-// Cached temperature readings
-static uint16_t lastVrefRaw = 0;
-static uint16_t lastTempRaw = 0;
-static uint16_t lastVrefMillivolts = 0;
-static int16_t lastTemperatureCelsius = 0;
-
 void initThermalADC(void) {
     // Enable internal measurement paths for VREFINT and temperature sensor
     LL_ADC_SetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(hadc1.Instance),
@@ -62,30 +56,17 @@ static float readTemperature(void) {
     // Calculate actual Vref from VREFINT measurement
     uint16_t vrefMillivolts = __LL_ADC_CALC_VREFANALOG_VOLTAGE(vrefRaw, LL_ADC_RESOLUTION_12B);
 
-    // Scale factory calibration point to current Vref
-    // Factory calibration was done at 3.0V, but actual Vref may differ
-    int32_t v30Scaled = ((int32_t)(*TEMPSENSOR_CAL1_ADDR) * (int32_t)vrefMillivolts)
-                        / __LL_ADC_DIGITAL_SCALE(LL_ADC_RESOLUTION_12B);
+    float vSenseMv = (float)tempRaw * (float)vrefMillivolts / 4095.0f;
+    float v30Mv = (float)(*TEMPSENSOR_CAL1_ADDR) * (float)vrefMillivolts / 4095.0f;
+    float avgSlopeUvPerC = (float)TEMPSENSOR_AVGSLOPE_UV_PER_C;
 
-    // Calculate temperature using ST's macro
-    int16_t temperatureCelsius = __LL_ADC_CALC_TEMPERATURE_TYP_PARAMS(
-                                    TEMPSENSOR_AVGSLOPE_UV_PER_C,
-                                    v30Scaled,
-                                    TEMPSENSOR_CAL1_TEMP,
-                                    vrefMillivolts,
-                                    tempRaw,
-                                    LL_ADC_RESOLUTION_12B);
+    float temperatureCelsius = ((vSenseMv - v30Mv) * 1000.0f / avgSlopeUvPerC) + 30.0f;
 
-    // Cache values for debugging
-    lastVrefRaw = vrefRaw;
-    lastTempRaw = tempRaw;
-    lastVrefMillivolts = vrefMillivolts;
-    lastTemperatureCelsius = temperatureCelsius;
-
-    return (float)temperatureCelsius;
+    return temperatureCelsius;
 }
 
 rgbw_t thermalLimitColor(rgbw_t input) {
+    const float ALPHA = 0.99f;
     static uint32_t lastReadTime = 0;
     static float lastTemperature = 20.0f;
 
@@ -102,7 +83,7 @@ rgbw_t thermalLimitColor(rgbw_t input) {
         if (lastTemperature >= MAX_TEMP_CELSIUS) {
             limitationFactor = 0.0f;
         } else {
-            limitationFactor = (MAX_TEMP_CELSIUS - lastTemperature) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
+            limitationFactor = ALPHA * limitationFactor + (1.0f - ALPHA) * (MAX_TEMP_CELSIUS - lastTemperature) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
         }
     }
     else {
