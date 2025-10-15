@@ -26,3 +26,4 @@ static const led_luminance_t LED_LUMINANCE = {
 };
 
 rgbw_t rgb_to_rgbw_corrected(rgb_t *input_rgb);
+rgbw_t rgbw_to_rgbw_corrected(rgbw_t *input_rgbw);

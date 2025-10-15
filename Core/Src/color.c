@@ -76,3 +76,17 @@ rgbw_t rgb_to_rgbw_corrected(rgb_t *input_rgb){
 
     return led_rgbw;
 }
+
+rgbw_t rgbw_to_rgbw_corrected(rgbw_t *input_rgbw){
+    // Apply intensity scaling based on LED datasheet
+    rgbw_t led_rgbw = intensity_scaling(input_rgbw);
+
+    // Apply gamma correction for perceptual linearity
+    // This makes brightness changes feel uniform across the entire range
+    led_rgbw.r = applyGamma(led_rgbw.r);
+    led_rgbw.g = applyGamma(led_rgbw.g);
+    led_rgbw.b = applyGamma(led_rgbw.b);
+    led_rgbw.w = applyGamma(led_rgbw.w);
+
+    return led_rgbw;
+}

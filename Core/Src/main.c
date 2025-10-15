@@ -18,14 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "color.h"
-#include "thermal_control.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "color.h"
 #include "thermal_control.h"
-#define RXBUFFERSIZE  3
+#include "protocol.h"
+#define RXBUFFERSIZE  5
+#define TXBUFFERSIZE  2
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +37,14 @@ __IO uint32_t     Xfer_Complete = 0;
 /* USER CODE BEGIN PD */
 /* Buffer used for reception */
 uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
+uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
+
+#define RGBW
+#ifdef RGBW
+static rgbw_t requested_color = {0, 0, 0, 0};
+#else
 static rgb_t requested_color = {0, 0, 0};
+#endif
 
 /* USER CODE END PD */
 
@@ -182,7 +189,11 @@ int main(void)
   while (1)
   {
     // rgbw_t led_color = {requested_color.r, requested_color.g, requested_color.b, 0};
+  #ifdef RGBW
+    rgbw_t led_color = rgbw_to_rgbw_corrected(&requested_color);
+  #else
     rgbw_t led_color = rgb_to_rgbw_corrected(&requested_color);
+  #endif
     rgbw_t led_color_temp_limited = thermalLimitColor(led_color);
 
     // Rev.A
@@ -204,8 +215,8 @@ int main(void)
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
       TIM1->CCR1 = led_color_temp_limited.g;
-      TIM1->CCR2 = led_color_temp_limited.r;
-      TIM1->CCR3 = led_color_temp_limited.b;
+      TIM1->CCR2 = led_color_temp_limited.b;
+      TIM1->CCR3 = led_color_temp_limited.r;
       TIM1->CCR4 = led_color_temp_limited.w;
     // } else {
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
@@ -540,15 +551,29 @@ static void MX_GPIO_Init(void)
   */
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 {
-  /* Toggle LED4: Transfer in reception process is correct */
-  // topLedR = aRxBuffer[7]; //Red
-  // topLedG = aRxBuffer[6]; //Green
-  // topLedB = aRxBuffer[5]; //Blue
-  // topLedW = aRxBuffer[4]; //White
+  // Fixed packet size: always 5 bytes (CMD + 4 data bytes)
+  uint8_t cmd = aRxBuffer[0];
 
-  requested_color.r = aRxBuffer[0]; //Red
-  requested_color.g = aRxBuffer[1]; //Green
-  requested_color.b = aRxBuffer[2]; //Blue
+  switch(cmd) {
+    case CMD_SET_COLOR:
+      requested_color.b = aRxBuffer[1]; //Blue
+      requested_color.g = aRxBuffer[2]; //Green
+      requested_color.r = aRxBuffer[3]; //Red
+#ifdef RGBW
+      requested_color.w = aRxBuffer[4]; //White
+#endif
+      break;
+
+    case CMD_GET_VERSION:
+      // Prepare version response
+      aTxBuffer[0] = CMD_GET_VERSION;
+      aTxBuffer[1] = HP_LED_PROTOCOL_VERSION;
+      break;
+
+    default:
+      // Unknown command - ignore
+      break;
+  }
 }
 
 /**
@@ -563,10 +588,17 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
 {
   if (TransferDirection == I2C_DIRECTION_TRANSMIT)
   {
-    /*##- Put I2C peripheral in reception process ###########################*/
     if (HAL_I2C_Slave_Seq_Receive_IT(&hi2c1, (uint8_t *)aRxBuffer, RXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
     {
       /* Transfer error in reception process */
+      Error_Handler();
+    }
+  }
+  else
+  {
+    // Master is reading from us - send the prepared response
+    if (HAL_I2C_Slave_Seq_Transmit_IT(&hi2c1, aTxBuffer, TXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
+    {
       Error_Handler();
     }
   }
