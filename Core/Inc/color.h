@@ -3,10 +3,6 @@
 #include <stdint.h>
 
 typedef struct {
-    uint8_t r, g, b;
-} rgb_t;
-
-typedef struct {
     uint8_t r, g, b, w;
 } rgbw_t;
 
@@ -25,5 +21,4 @@ static const led_luminance_t LED_LUMINANCE = {
     .w_lumens = 250
 };
 
-rgbw_t rgb_to_rgbw_corrected(rgb_t *input_rgb);
 rgbw_t rgbw_to_rgbw_corrected(rgbw_t *input_rgbw);

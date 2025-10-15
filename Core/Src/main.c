@@ -39,12 +39,7 @@ __IO uint32_t     Xfer_Complete = 0;
 uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
 uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
 
-#define RGBW
-#ifdef RGBW
 static rgbw_t requested_color = {0, 0, 0, 0};
-#else
-static rgb_t requested_color = {0, 0, 0};
-#endif
 
 /* USER CODE END PD */
 
@@ -188,12 +183,11 @@ int main(void)
 
   while (1)
   {
-    // rgbw_t led_color = {requested_color.r, requested_color.g, requested_color.b, 0};
-  #ifdef RGBW
+#ifdef color_correction
     rgbw_t led_color = rgbw_to_rgbw_corrected(&requested_color);
-  #else
-    rgbw_t led_color = rgb_to_rgbw_corrected(&requested_color);
-  #endif
+# else
+    rgbw_t led_color = requested_color;
+#endif
     rgbw_t led_color_temp_limited = thermalLimitColor(led_color);
 
     // Rev.A
@@ -559,9 +553,7 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
       requested_color.b = aRxBuffer[1]; //Blue
       requested_color.g = aRxBuffer[2]; //Green
       requested_color.r = aRxBuffer[3]; //Red
-#ifdef RGBW
       requested_color.w = aRxBuffer[4]; //White
-#endif
       break;
 
     case CMD_GET_VERSION:

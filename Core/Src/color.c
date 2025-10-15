@@ -27,22 +27,6 @@ static inline uint8_t applyGamma(uint8_t value) {
     return gamma8[value];
 }
 
-rgbw_t extract_white(const rgb_t *led_rgb) {
-    // Extract white component using minimum method
-    float W = fminf(fminf(led_rgb->r, led_rgb->g), led_rgb->b);
-    W = fmaxf(0.0f, W);
-
-    // Subtract white from RGB channels
-    rgbw_t result = {
-        .r = fmaxf(0.0f, led_rgb->r - W),
-        .g = fmaxf(0.0f, led_rgb->g - W),
-        .b = fmaxf(0.0f, led_rgb->b - W),
-        .w = W
-    };
-
-    return result;
-}
-
 rgbw_t intensity_scaling(const rgbw_t *input_rgb) {
     // Scale based on luminance values from datasheet
     // Dynamically find the weakest channel to use as reference
@@ -58,23 +42,6 @@ rgbw_t intensity_scaling(const rgbw_t *input_rgb) {
     };
 
     return result;
-}
-
-rgbw_t rgb_to_rgbw_corrected(rgb_t *input_rgb){
-    // Extract white component
-    rgbw_t color_rgbw = extract_white(input_rgb);
-
-    // Apply intensity scaling based on LED datasheet
-    rgbw_t led_rgbw = intensity_scaling(&color_rgbw);
-
-    // Apply gamma correction for perceptual linearity
-    // This makes brightness changes feel uniform across the entire range
-    led_rgbw.r = applyGamma(led_rgbw.r);
-    led_rgbw.g = applyGamma(led_rgbw.g);
-    led_rgbw.b = applyGamma(led_rgbw.b);
-    led_rgbw.w = applyGamma(led_rgbw.w);
-
-    return led_rgbw;
 }
 
 rgbw_t rgbw_to_rgbw_corrected(rgbw_t *input_rgbw){
