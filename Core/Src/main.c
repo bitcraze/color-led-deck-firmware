@@ -24,8 +24,6 @@
 #include "color.h"
 #include "thermal_control.h"
 #include "protocol.h"
-#define RXBUFFERSIZE  5
-#define TXBUFFERSIZE  2
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -562,6 +560,12 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
       aTxBuffer[1] = HP_LED_PROTOCOL_VERSION;
       break;
 
+    case CMD_GET_THERMAL_STATUS:
+      // Prepare thermal status response
+      aTxBuffer[0] = CMD_GET_THERMAL_STATUS;
+      aTxBuffer[1] = (uint8_t)lastTemperature; // temp as integer degrees
+      aTxBuffer[2] = (uint8_t)(throttlingFactor * 100.0f);  // factor as percentage 0-100
+      break;
     default:
       // Unknown command - ignore
       break;

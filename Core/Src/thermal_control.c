@@ -7,6 +7,9 @@
 // Temperature sensor slope from datasheet (µV/°C)
 #define TEMPSENSOR_AVGSLOPE_UV_PER_C    (2530)
 
+float throttlingFactor = 0.0f;
+float lastTemperature = 20.0f;
+
 // ADC handle
 extern ADC_HandleTypeDef hadc1;
 
@@ -68,11 +71,9 @@ static float readTemperature(void) {
 rgbw_t thermalLimitColor(rgbw_t input) {
     const float ALPHA = 0.99f;
     static uint32_t lastReadTime = 0;
-    static float lastTemperature = 20.0f;
 
     uint32_t currentTime = HAL_GetTick();
 
-    static float limitationFactor = 1.0f;
 
     // Update temperature reading every 100ms
     if (currentTime - lastReadTime >= 100) {
@@ -81,21 +82,21 @@ rgbw_t thermalLimitColor(rgbw_t input) {
     }
     if (lastTemperature > SLOPE_START_CELSIUS) {
         if (lastTemperature >= MAX_TEMP_CELSIUS) {
-            limitationFactor = 0.0f;
+            throttlingFactor = 1.0f;
         } else {
-            limitationFactor = ALPHA * limitationFactor + (1.0f - ALPHA) * (MAX_TEMP_CELSIUS - lastTemperature) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
+            throttlingFactor = ALPHA * throttlingFactor + (1.0f - ALPHA) * (lastTemperature - SLOPE_START_CELSIUS) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
         }
     }
     else {
-        limitationFactor = 1.0f;
+        throttlingFactor = 0.0f;
     }
 
     rgbw_t output;
 
-    output.r = (uint8_t)(input.r * limitationFactor);
-    output.g = (uint8_t)(input.g * limitationFactor);
-    output.b = (uint8_t)(input.b * limitationFactor);
-    output.w = (uint8_t)(input.w * limitationFactor);
+    output.r = (uint8_t)(input.r * (1 - throttlingFactor));
+    output.g = (uint8_t)(input.g * (1 - throttlingFactor));
+    output.b = (uint8_t)(input.b * (1 - throttlingFactor));
+    output.w = (uint8_t)(input.w * (1 - throttlingFactor));
 
     return output;
 }
