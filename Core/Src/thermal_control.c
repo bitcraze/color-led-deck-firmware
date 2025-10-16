@@ -69,7 +69,7 @@ static float readTemperature(void) {
 }
 
 rgbw_t thermalLimitColor(rgbw_t input) {
-    const float ALPHA = 0.99f;
+    const float ALPHA = 0.999f;
     static uint32_t lastReadTime = 0;
 
     uint32_t currentTime = HAL_GetTick();
