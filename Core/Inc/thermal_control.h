@@ -10,5 +10,5 @@ extern float lastTemperature;
 extern float throttlingFactor;
 
 void initThermalADC(void);
-rgbw_t thermalLimitColor(rgbw_t input);
+rgbw_t thermalLimitBrightness(rgbw_t input);
 void thermalDebugPrint(void);

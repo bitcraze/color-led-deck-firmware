@@ -181,7 +181,7 @@ int main(void)
 
   while (1)
   {
-    rgbw_t led_color_temp_limited = thermalLimitColor(requested_color);
+    rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
 
     // Rev.A
     // TIM1->CCR1 = botLedW; //White

@@ -68,7 +68,7 @@ static float readTemperature(void) {
     return temperatureCelsius;
 }
 
-rgbw_t thermalLimitColor(rgbw_t input) {
+rgbw_t thermalLimitBrightness(rgbw_t input) {
     const float ALPHA = 0.999f;
     static uint32_t lastReadTime = 0;
 
