@@ -3,6 +3,7 @@
 #include "stm32c0xx_ll_adc.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 
 // Temperature sensor slope from datasheet (µV/°C)
 #define TEMPSENSOR_AVGSLOPE_UV_PER_C    (2530)
@@ -69,27 +70,36 @@ static float readTemperature(void) {
 }
 
 rgbw_t thermalLimitBrightness(rgbw_t input) {
-    const float ALPHA = 0.999f;
+    const float ALPHA = 0.99f;
+    const float TEMP_FILTER_ALPHA = 0.8f;  // Low-pass filter coefficient for temperature
     static uint32_t lastReadTime = 0;
+    static float filteredTemperature = 20.0f;  // Filtered temperature value
 
     uint32_t currentTime = HAL_GetTick();
 
-
-    // Update temperature reading every 100ms
-    if (currentTime - lastReadTime >= 100) {
-        lastTemperature = readTemperature();
+    // Update temperature reading every 10ms with low-pass filtering
+    if (currentTime - lastReadTime >= 10) {
+        float rawTemp = readTemperature();
+        filteredTemperature = TEMP_FILTER_ALPHA * filteredTemperature + (1.0f - TEMP_FILTER_ALPHA) * rawTemp;
+        lastTemperature = filteredTemperature;
         lastReadTime = currentTime;
     }
+
+    // Calculate target throttling
+    float targetThrottling;
     if (lastTemperature > SLOPE_START_CELSIUS) {
         if (lastTemperature >= MAX_TEMP_CELSIUS) {
-            throttlingFactor = 1.0f;
+            targetThrottling = 1.0f;
         } else {
-            throttlingFactor = ALPHA * throttlingFactor + (1.0f - ALPHA) * (lastTemperature - SLOPE_START_CELSIUS) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
+            targetThrottling = (lastTemperature - SLOPE_START_CELSIUS) / (MAX_TEMP_CELSIUS - SLOPE_START_CELSIUS);
+            targetThrottling = fmaxf(0.0f, fminf(1.0f, targetThrottling));  // Clamp 0-1
         }
+    } else {
+        targetThrottling = 0.0f;
     }
-    else {
-        throttlingFactor = 0.0f;
-    }
+
+    // Apply filtering to smooth transitions
+    throttlingFactor = ALPHA * throttlingFactor + (1.0f - ALPHA) * targetThrottling;
 
     rgbw_t output;
 
