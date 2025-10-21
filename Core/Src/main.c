@@ -1,20 +1,32 @@
 /* USER CODE BEGIN Header */
+
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2023 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ * ,---------,       ____  _ __
+ * |  ,-^-,  |      / __ )(_) /_______________ _____  ___
+ * | (  O  ) |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ * | / ,--´  |    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+ *    +------`   /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ *
+ * Crazyflie control firmware
+ *
+ * Copyright (C) 2025 Bitcraze AB
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, in version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ * main.c - Color LED deck application with I2C slave protocol and LED control
+ */
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
