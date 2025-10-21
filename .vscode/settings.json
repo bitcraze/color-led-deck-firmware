@@ -1,24 +1,13 @@
 {
-    "files.associations": {
-        "thermal_control.h": "c"
-    },
-    "cmake.configureOnOpen": false,
-    "cmake.sourceDirectory": "${workspaceFolder}",
-    "cmake.autoSelectActiveFolder": false,
-    "cmake.configureOnEdit": false,
-    "cmake.scanForKits": false,
-    "cmake.showSystemKits": false,
-    "files.exclude": {
-        "**/Drivers/CMSIS/**/CMakeLists.txt": true
-    },
-    "search.exclude": {
-        "**/Drivers/CMSIS/**": true
-    },
+    "cmake.cmakePath": "cube-cmake",
+    "cmake.configureArgs": [
+        "-DCMAKE_COMMAND=cube-cmake"
+    ],
     "C_Cpp.intelliSenseEngine": "disabled",
-    "clangd.path": "clangd",
-    "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}",
-        "--background-index",
-        "--clang-tidy"
+    "stm32cube-ide-clangd.path": "cube",
+    "stm32cube-ide-clangd.arguments": [
+        "starm-clangd",
+        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/13.3.1+st.9/bin/arm-none-eabi-gcc",
+        "--query-driver=${env:CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/13.3.1+st.9/bin/arm-none-eabi-g++"
     ]
 }
