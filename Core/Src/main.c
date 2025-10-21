@@ -552,7 +552,7 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
     case CMD_GET_VERSION:
       // Prepare version response
       aTxBuffer[0] = CMD_GET_VERSION;
-      aTxBuffer[1] = HP_LED_PROTOCOL_VERSION;
+      aTxBuffer[1] = COLOR_LED_PROTOCOL_VERSION;
       break;
 
     case CMD_GET_THERMAL_STATUS:

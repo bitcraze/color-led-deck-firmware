@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // Protocol version - increment when changing I2C command format
-#define HP_LED_PROTOCOL_VERSION 1
+#define COLOR_LED_PROTOCOL_VERSION 1
 
 #define RXBUFFERSIZE  5
 #define TXBUFFERSIZE  3
