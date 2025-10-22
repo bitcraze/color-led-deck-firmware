@@ -214,8 +214,8 @@ int main(void)
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
       TIM1->CCR1 = led_color_temp_limited.g;
-      TIM1->CCR2 = led_color_temp_limited.b;
-      TIM1->CCR3 = led_color_temp_limited.r;
+      TIM1->CCR2 = led_color_temp_limited.r;
+      TIM1->CCR3 = led_color_temp_limited.b;
       TIM1->CCR4 = led_color_temp_limited.w;
     // } else {
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
@@ -557,9 +557,9 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 
   switch(cmd) {
     case CMD_SET_COLOR:
-      requested_color.b = aRxBuffer[1]; //Blue
+      requested_color.r = aRxBuffer[1]; //Red
       requested_color.g = aRxBuffer[2]; //Green
-      requested_color.r = aRxBuffer[3]; //Red
+      requested_color.b = aRxBuffer[3]; //Blue
       requested_color.w = aRxBuffer[4]; //White
       break;
 
