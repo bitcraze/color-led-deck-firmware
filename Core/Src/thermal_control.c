@@ -35,6 +35,12 @@
 // Temperature sensor slope from datasheet (µV/°C)
 #define TEMPSENSOR_AVGSLOPE_UV_PER_C    (2530)
 
+// Temperature sensor calibration point 1 reference temperature (°C)
+#define TEMPSENSOR_CAL1_TEMP_C          (30.0f)
+
+// ADC 12-bit resolution: 2^12 - 1 = 4095 (max digital value)
+#define ADC_12BIT_MAX_VALUE             (4095.0f)
+
 float throttlingFactor = 0.0f;
 float lastTemperature = 20.0f;
 
@@ -87,11 +93,11 @@ static float readTemperature(void) {
     // Calculate actual Vref from VREFINT measurement
     uint16_t vrefMillivolts = __LL_ADC_CALC_VREFANALOG_VOLTAGE(vrefRaw, LL_ADC_RESOLUTION_12B);
 
-    float vSenseMv = (float)tempRaw * (float)vrefMillivolts / 4095.0f;
-    float v30Mv = (float)(*TEMPSENSOR_CAL1_ADDR) * (float)vrefMillivolts / 4095.0f;
+    float vSenseMv = (float)tempRaw * (float)vrefMillivolts / ADC_12BIT_MAX_VALUE;
+    float v30Mv = (float)(*TEMPSENSOR_CAL1_ADDR) * (float)vrefMillivolts / ADC_12BIT_MAX_VALUE;
     float avgSlopeUvPerC = (float)TEMPSENSOR_AVGSLOPE_UV_PER_C;
 
-    float temperatureCelsius = ((vSenseMv - v30Mv) * 1000.0f / avgSlopeUvPerC) + 30.0f;
+    float temperatureCelsius = ((vSenseMv - v30Mv) * 1000.0f / avgSlopeUvPerC) + TEMPSENSOR_CAL1_TEMP_C;
 
     return temperatureCelsius;
 }
