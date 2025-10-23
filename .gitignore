@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.o
+*.d
+
+# CMake
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+.cmake/
+
+# IDE
+.cache/
+.vscode/.cortex-debug.*
+.vscode/c_cpp_properties.json
+
+# Debug
+*.log

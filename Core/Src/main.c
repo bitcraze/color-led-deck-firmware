@@ -1,27 +1,41 @@
 /* USER CODE BEGIN Header */
+
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2023 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ * ,---------,       ____  _ __
+ * |  ,-^-,  |      / __ )(_) /_______________ _____  ___
+ * | (  O  ) |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ * | / ,--´  |    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+ *    +------`   /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ *
+ * Crazyflie control firmware
+ *
+ * Copyright (C) 2025 Bitcraze AB
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, in version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ * main.c - Color LED deck application with I2C slave protocol and LED control
+ */
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#define RXBUFFERSIZE  4
+#include "color.h"
+#include "thermal_control.h"
+#include "protocol.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,15 +46,10 @@ __IO uint32_t     Xfer_Complete = 0;
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* Buffer used for reception */
-uint8_t aRxBuffer[RXBUFFERSIZE];
-uint16_t topLedR;
-uint16_t topLedG;
-uint16_t topLedB;
-uint16_t topLedW;
-uint16_t botLedR;
-uint16_t botLedG;
-uint16_t botLedB;
-uint16_t botLedW;
+uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
+uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
+
+static rgbw_t requested_color = {0, 0, 0, 0};
 
 /* USER CODE END PD */
 
@@ -156,15 +165,17 @@ int main(void)
   MX_TIM1_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  initThermalADC();
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 
-  TIM1->CCR1 = 0; 
-  TIM1->CCR2 = 0; 
+  TIM1->CCR1 = 0;
+  TIM1->CCR2 = 0;
   TIM1->CCR3 = 0;
-  TIM1->CCR4 = 0; 
+  TIM1->CCR4 = 0;
 
   if(HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK)
   {
@@ -182,6 +193,7 @@ int main(void)
 
   while (1)
   {
+    rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
 
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
@@ -201,10 +213,10 @@ int main(void)
     //   // Not both at the same time, board can then overheat.
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
-      TIM1->CCR1 = botLedG;
-      TIM1->CCR2 = botLedR;
-      TIM1->CCR3 = botLedB;
-      TIM1->CCR4 = botLedW;
+      TIM1->CCR1 = led_color_temp_limited.g;
+      TIM1->CCR2 = led_color_temp_limited.r;
+      TIM1->CCR3 = led_color_temp_limited.b;
+      TIM1->CCR4 = led_color_temp_limited.w;
     // } else {
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
     //   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
@@ -218,8 +230,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  /* USER CODE END 3 */
   }
+  /* USER CODE END 3 */
 }
 
 /**
@@ -293,7 +305,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_1CYCLE_5;
+  hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_160CYCLES_5;
   hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_1CYCLE_5;
   hadc1.Init.OversamplingMode = DISABLE;
   hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
@@ -515,6 +527,8 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
 
   /*Configure GPIO pins : PA11 PA12 */
@@ -538,16 +552,33 @@ static void MX_GPIO_Init(void)
   */
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 {
-  /* Toggle LED4: Transfer in reception process is correct */
-  // topLedR = aRxBuffer[7]; //Red
-  // topLedG = aRxBuffer[6]; //Green
-  // topLedB = aRxBuffer[5]; //Blue
-  // topLedW = aRxBuffer[4]; //White
-  
-  botLedR = aRxBuffer[3]; //Red
-  botLedG = aRxBuffer[2]; //Green
-  botLedB = aRxBuffer[1]; //Blue
-  botLedW = aRxBuffer[0]; //White
+  // Fixed packet size: always 5 bytes (CMD + 4 data bytes)
+  uint8_t cmd = aRxBuffer[0];
+
+  switch(cmd) {
+    case CMD_SET_COLOR:
+      requested_color.r = aRxBuffer[1]; //Red
+      requested_color.g = aRxBuffer[2]; //Green
+      requested_color.b = aRxBuffer[3]; //Blue
+      requested_color.w = aRxBuffer[4]; //White
+      break;
+
+    case CMD_GET_VERSION:
+      // Prepare version response
+      aTxBuffer[0] = CMD_GET_VERSION;
+      aTxBuffer[1] = COLOR_LED_PROTOCOL_VERSION;
+      break;
+
+    case CMD_GET_THERMAL_STATUS:
+      // Prepare thermal status response
+      aTxBuffer[0] = CMD_GET_THERMAL_STATUS;
+      aTxBuffer[1] = (uint8_t)lastTemperature; // temp as integer degrees
+      aTxBuffer[2] = (uint8_t)(throttlingFactor * 100.0f);  // factor as percentage 0-100
+      break;
+    default:
+      // Unknown command - ignore
+      break;
+  }
 }
 
 /**
@@ -562,10 +593,17 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
 {
   if (TransferDirection == I2C_DIRECTION_TRANSMIT)
   {
-    /*##- Put I2C peripheral in reception process ###########################*/
     if (HAL_I2C_Slave_Seq_Receive_IT(&hi2c1, (uint8_t *)aRxBuffer, RXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
     {
       /* Transfer error in reception process */
+      Error_Handler();
+    }
+  }
+  else
+  {
+    // Master is reading from us - send the prepared response
+    if (HAL_I2C_Slave_Seq_Transmit_IT(&hi2c1, aTxBuffer, TXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
+    {
       Error_Handler();
     }
   }

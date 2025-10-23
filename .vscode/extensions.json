@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "stmicroelectronics.stm32-vscode-extension"
+    ],
+    "unwantedRecommendations": [
+        "ms-vscode.cpptools"
+    ]
+}
