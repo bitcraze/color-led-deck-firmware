@@ -557,10 +557,10 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 
   switch(cmd) {
     case CMD_SET_COLOR:
-      requested_color.r = aRxBuffer[1]; //Red
-      requested_color.g = aRxBuffer[2]; //Green
-      requested_color.b = aRxBuffer[3]; //Blue
-      requested_color.w = aRxBuffer[4]; //White
+      requested_color.w = aRxBuffer[1]; //White
+      requested_color.r = aRxBuffer[2]; //Red
+      requested_color.g = aRxBuffer[3]; //Green
+      requested_color.b = aRxBuffer[4]; //Blue
       break;
 
     case CMD_GET_VERSION:
