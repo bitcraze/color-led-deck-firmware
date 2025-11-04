@@ -45,6 +45,7 @@ jobs:
       with:
         tag_name: ${{ github.event.inputs.tag }}
         name: Release ${{ github.event.inputs.tag }}
+        target_commitish: ${{ github.sha }}
         draft: ${{ github.event.inputs.draft }}
         prerelease: ${{ github.event.inputs.prerelease }}
         files: ./artifacts/color-led.bin
