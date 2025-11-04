@@ -2,6 +2,7 @@ name: build
 
 on:
   workflow_dispatch:
+  workflow_call:
   pull_request:
     branches:
     - main
@@ -12,7 +13,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Install ARM GCC toolchain
       run: |
@@ -28,3 +29,14 @@ jobs:
 
     - name: Build firmware
       run: cmake --build build
+
+    - name: Verify binary generation
+      run: |
+        ls -lh build/
+        file build/color-led.bin
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v5
+      with:
+        name: color-led-binary
+        path: build/color-led.bin
