@@ -26,3 +26,11 @@ The STM32Cube VSCode extension will automatically install and configure dependen
 To flash and debug:
 - Press `F5` to build, flash, and start debugging
 - Or click the debug button in the VSCode debug panel
+
+## Alternatively
+
+```
+cmake --preset Release
+cmake --build build/Release
+probe-rs download --chip stm32c011f6ux build/Debug/color-led.elf
+```
