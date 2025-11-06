@@ -51,6 +51,13 @@ uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
 
 static rgbw_t requested_color = {0, 0, 0, 0};
 
+// I2C address configuration
+// Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
+// Master address 0x10 -> OwnAddress1 = 0x20 (32)
+// Master address 0x11 -> OwnAddress1 = 0x22 (34)
+#define I2C_BASE_ADDRESS  32  // 0x20 = 0x10 << 1
+static uint8_t i2c_address = I2C_BASE_ADDRESS;
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -165,6 +172,30 @@ int main(void)
   MX_TIM1_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  // Read ADDR_SELECT pin PA12 to determine I2C address
+  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_12) == GPIO_PIN_SET)
+  {
+    i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (32 -> 34, i.e. 0x10 -> 0x11)
+
+    // Reconfigure I2C with new address
+    HAL_I2C_DeInit(&hi2c1);
+    hi2c1.Init.OwnAddress1 = i2c_address;
+    if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    // Reconfigure filters (same as MX_I2C1_Init)
+    if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+    {
+      Error_Handler();
+    }
+    if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+    {
+      Error_Handler();
+    }
+  }
 
   initThermalADC();
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
@@ -528,14 +559,17 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
-
-  /*Configure GPIO pins : PA11 PA12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+  /*Configure GPIO pin : PA11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
