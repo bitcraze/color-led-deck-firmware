@@ -70,6 +70,10 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define I2C_ADDR_Pin GPIO_PIN_15
+#define I2C_ADDR_GPIO_Port GPIOC
+#define ADDR_SELECT_Pin GPIO_PIN_12
+#define ADDR_SELECT_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 
