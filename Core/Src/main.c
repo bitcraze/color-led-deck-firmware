@@ -56,7 +56,6 @@ static rgbw_t requested_color = {0, 0, 0, 0};
 // Master address 0x10 -> OwnAddress1 = 0x20 (32)
 // Master address 0x11 -> OwnAddress1 = 0x22 (34)
 #define I2C_BASE_ADDRESS  32  // 0x20 = 0x10 << 1
-static uint8_t i2c_address = I2C_BASE_ADDRESS;
 
 /* USER CODE END PD */
 
@@ -179,7 +178,7 @@ int main(void)
   // Read I2C_ADDR pin (PC15) to determine I2C address
   if (HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin) == GPIO_PIN_SET)
   {
-    i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (32 -> 34, i.e. 0x10 -> 0x11)
+    static uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (32 -> 34, i.e. 0x10 -> 0x11)
 
     // Reconfigure I2C with new address
     HAL_I2C_DeInit(&hi2c1);
