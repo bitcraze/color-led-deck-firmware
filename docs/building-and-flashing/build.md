@@ -1,28 +1,51 @@
 ---
-title: Build
+title: Development Guide
 page_id: build
 ---
 
-## Prerequisites
+## Building
+
+### Prerequisites
+
+- CMake
+- ARM GCC toolchain
+
+### Build Commands
+
+```bash
+cmake --preset Release
+cmake --build build/Release
+```
+
+This will generate the firmware binary at `build/Release/color-led.elf`.
+
+## Flashing
+
+Once built, flash the firmware to the board using probe-rs:
+
+```bash
+probe-rs download --chip stm32c011f6ux build/Release/color-led.elf
+```
+
+## Debugging
+
+For a more advanced development workflow with debugging capabilities:
+
+### Prerequisites
 
 - **VSCode** with the STM32Cube extension (see [.vscode/extensions.json](../../.vscode/extensions.json))
 
 The STM32Cube VSCode extension will automatically install and configure dependencies.
 
-## Setup
+### Setup
 
 1. Clone the repository
 2. Open the project in VSCode
 3. Install the recommended extensions when prompted
 4. The STM32Cube extension will set up the build environment automatically
 
-## Building
+### Debug Session
 
-- Press `Ctrl+Shift+B` to build
-- Or click the build button in the CMake extension toolbar
-
-## Debugging
-
-To flash and debug:
-- Press `F5` to build, flash, and start debugging
+To build, flash, and debug in one step:
+- Press `F5` to start a debug session
 - Or click the debug button in the VSCode debug panel
