@@ -36,6 +36,7 @@
 #include "color.h"
 #include "thermal_control.h"
 #include "protocol.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +51,8 @@ uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
 uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
 
 static rgbw_t requested_color = {0, 0, 0, 0};
+static uint8_t cached_led_position = LED_POS_NONE;  // Cached LED position detected at startup
+static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R, G, B, W]
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -85,7 +88,9 @@ static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+static uint8_t detectLedPosition(void);
+static bool readADCChannel8bit(uint32_t channel, uint8_t *result);
+static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_milliohms);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -173,7 +178,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // Wait for external circuit to stabilize and pull PC15 high if needed
-  HAL_Delay(500);
+  HAL_Delay(1000);
+
+  // Detect LED position once at startup and cache result
+  cached_led_position = detectLedPosition();
 
   // Read I2C_ADDR pin (PC15) to determine I2C address
   if (HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin) == GPIO_PIN_SET)
@@ -260,6 +268,20 @@ int main(void)
     // }
     
     HAL_Delay(1);
+
+    // Update cached ADC readings for LED current monitoring (round-robin)
+    // Reading in main loop avoids blocking I2C interrupts
+    // Only read one channel per iteration to keep loop fast
+    static uint8_t adc_channel_index = 0;
+    uint8_t value;
+
+    switch(adc_channel_index) {
+      case 0: if (readADCChannel8bit(ADC_CHANNEL_4, &value)) cached_led_current[0] = value; break;  // PA4 - CURR_R
+      case 1: if (readADCChannel8bit(ADC_CHANNEL_5, &value)) cached_led_current[1] = value; break;  // PA5 - CURR_G
+      case 2: if (readADCChannel8bit(ADC_CHANNEL_6, &value)) cached_led_current[2] = value; break;  // PA6 - CURR_B
+      case 3: if (readADCChannel8bit(ADC_CHANNEL_7, &value)) cached_led_current[3] = value; break;  // PA7 - CURR_W
+    }
+    adc_channel_index = (adc_channel_index + 1) % 4;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -585,6 +607,95 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+  * @brief  Read ADC channel value
+  * @param  channel: ADC channel to read
+  * @param  result: Pointer to store 8-bit ADC value (scaled from 12-bit)
+  * @retval true if successful, false on timeout
+  */
+static bool readADCChannel8bit(uint32_t channel, uint8_t *result) {
+  ADC_ChannelConfTypeDef sConfig = {0};
+  sConfig.Channel = channel;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_160CYCLES_5;
+
+  HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
+  HAL_ADC_Start(&hadc1);
+
+  // Use 10ms timeout (acceptable since we only read one channel per loop iteration)
+  if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {
+    uint16_t adc_value = HAL_ADC_GetValue(&hadc1);
+    HAL_ADC_Stop(&hadc1);
+    // Scale 12-bit (0-4095) to 8-bit (0-255)
+    *result = (uint8_t)(adc_value >> 4);
+    return true;
+  }
+
+  HAL_ADC_Stop(&hadc1);
+  return false;
+}
+
+/**
+  * @brief  Convert 8-bit ADC value to current in milliamps
+  * @param  adc_8bit: 8-bit ADC value (0-255)
+  * @param  sense_resistor_milliohms: Sense resistor value in milliohms (e.g., 3400 for 3.4Ω)
+  * @retval Current in milliamps
+  */
+static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_milliohms) {
+  // Convert 8-bit back to 12-bit
+  uint16_t adc_12bit = (uint16_t)adc_8bit << 4;
+
+  // Convert to voltage in millivolts (VDDA = 3100mV)
+  // voltage_mv = (adc_12bit / 4095) * 3100
+  uint32_t voltage_mv = ((uint32_t)adc_12bit * 3100) / 4095;
+
+  // Convert to current using Ohm's law: I = V / R
+  // current_ma = (voltage_mv * 1000) / sense_resistor_milliohms
+  uint16_t current_ma = (voltage_mv * 1000) / sense_resistor_milliohms;
+
+  return current_ma;
+}
+
+/**
+  * @brief  Detect LED position based on PA12 pin state
+  * @retval LED position (LED_POS_NONE, LED_POS_BOTTOM, LED_POS_TOP)
+  */
+static uint8_t detectLedPosition(void) {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_PinState state_pulldown, state_pullup;
+
+  // First read: with pull-down
+  state_pulldown = HAL_GPIO_ReadPin(ADDR_SELECT_GPIO_Port, ADDR_SELECT_Pin);
+
+  if (state_pulldown == GPIO_PIN_RESET) {
+    // Could be floating or actively driven low - test with pull-up
+    GPIO_InitStruct.Pin = ADDR_SELECT_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(ADDR_SELECT_GPIO_Port, &GPIO_InitStruct);
+    HAL_Delay(1);  // Brief delay for pin to stabilize
+
+    state_pullup = HAL_GPIO_ReadPin(ADDR_SELECT_GPIO_Port, ADDR_SELECT_Pin);
+
+    // Restore pull-down configuration
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    HAL_GPIO_Init(ADDR_SELECT_GPIO_Port, &GPIO_InitStruct);
+
+    if (state_pullup == GPIO_PIN_SET) {
+      // Pin was floating - no LED mounted
+      return LED_POS_NONE;
+    } else {
+      // Pin is actively driven LOW - bottom-facing LED
+      return LED_POS_BOTTOM;
+    }
+  } else {
+    // Pin is actively driven HIGH - top-facing LED
+    return LED_POS_TOP;
+  }
+}
+
 /**
   * @brief  Rx Transfer completed callback.
   * @param  I2cHandle: I2C handle
@@ -617,6 +728,35 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
       aTxBuffer[1] = (uint8_t)lastTemperature; // temp as integer degrees
       aTxBuffer[2] = (uint8_t)(throttlingFactor * 100.0f);  // factor as percentage 0-100
       break;
+
+    case CMD_GET_LED_POSITION:
+      // Prepare LED position response (cached from startup)
+      aTxBuffer[0] = CMD_GET_LED_POSITION;
+      aTxBuffer[1] = cached_led_position;
+      break;
+
+    case CMD_GET_LED_CURRENT:
+      // Convert cached ADC values to current in milliamps
+      // Red channel uses 3.4Ω (3400 milliohms), others use 1.0Ω (1000 milliohms)
+      {
+        uint16_t current_r = convertAdcToMilliamps(cached_led_current[0], 3400);  // PA4 - CURR_R
+        uint16_t current_g = convertAdcToMilliamps(cached_led_current[1], 1000);  // PA5 - CURR_G
+        uint16_t current_b = convertAdcToMilliamps(cached_led_current[2], 1000);  // PA6 - CURR_B
+        uint16_t current_w = convertAdcToMilliamps(cached_led_current[3], 1000);  // PA7 - CURR_W
+
+        aTxBuffer[0] = CMD_GET_LED_CURRENT;
+        // Pack as big-endian uint16_t (high byte, low byte)
+        aTxBuffer[1] = (current_r >> 8) & 0xFF;
+        aTxBuffer[2] = current_r & 0xFF;
+        aTxBuffer[3] = (current_g >> 8) & 0xFF;
+        aTxBuffer[4] = current_g & 0xFF;
+        aTxBuffer[5] = (current_b >> 8) & 0xFF;
+        aTxBuffer[6] = current_b & 0xFF;
+        aTxBuffer[7] = (current_w >> 8) & 0xFF;
+        aTxBuffer[8] = current_w & 0xFF;
+      }
+      break;
+
     default:
       // Unknown command - ignore
       break;

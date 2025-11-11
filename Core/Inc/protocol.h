@@ -29,14 +29,21 @@
 #define VERSION_H
 
 // Protocol version - increment when changing I2C command format
-#define COLOR_LED_PROTOCOL_VERSION 1
+#define COLOR_LED_PROTOCOL_VERSION 2
 
 #define RXBUFFERSIZE  5
-#define TXBUFFERSIZE  3
+#define TXBUFFERSIZE  9  // CMD (1) + 4 × uint16_t current values (8)
 
 // Command types
 #define CMD_GET_VERSION         0x00  // Get protocol version
 #define CMD_SET_COLOR           0x01  // Set LED color
 #define CMD_GET_THERMAL_STATUS  0x02  // Get thermal status
+#define CMD_GET_LED_POSITION    0x03  // Get LED mounting position
+#define CMD_GET_LED_CURRENT     0x04  // Get LED current readings
+
+// LED position values
+#define LED_POS_NONE            0x00  // No LED / floating
+#define LED_POS_BOTTOM          0x01  // Bottom-mounted
+#define LED_POS_TOP             0x02  // Top-mounted
 
 #endif // VERSION_H
