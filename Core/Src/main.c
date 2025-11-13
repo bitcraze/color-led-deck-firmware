@@ -58,7 +58,7 @@ static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R,
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
 // Master address 0x10 -> OwnAddress1 = 0x20 (32)
 // Master address 0x11 -> OwnAddress1 = 0x22 (34)
-#define I2C_BASE_ADDRESS  32  // 0x20 = 0x10 << 1
+#define I2C_BASE_ADDRESS  96  // 0x60 = 0x30 << 1
 
 /* USER CODE END PD */
 
@@ -177,16 +177,17 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  // Wait for external circuit to stabilize and pull PC15 high if needed
-  HAL_Delay(1000);
+  // Wait for power supply to stabilize
+  HAL_Delay(100);
 
   // Detect LED position once at startup and cache result
   cached_led_position = detectLedPosition();
 
   // Read I2C_ADDR pin (PC15) to determine I2C address
+  // Inverted logic: LOW (pulled down by Crazyflie) = alternate address 0x19
   if (HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin) == GPIO_PIN_SET)
   {
-    static uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (32 -> 34, i.e. 0x10 -> 0x11)
+    uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (48 -> 50, i.e. 0x18 -> 0x19)
 
     // Reconfigure I2C with new address
     HAL_I2C_DeInit(&hi2c1);
@@ -280,6 +281,9 @@ int main(void)
       case 1: if (readADCChannel8bit(ADC_CHANNEL_5, &value)) cached_led_current[1] = value; break;  // PA5 - CURR_G
       case 2: if (readADCChannel8bit(ADC_CHANNEL_6, &value)) cached_led_current[2] = value; break;  // PA6 - CURR_B
       case 3: if (readADCChannel8bit(ADC_CHANNEL_7, &value)) cached_led_current[3] = value; break;  // PA7 - CURR_W
+      default:
+        adc_channel_index = 0;
+        break;
     }
     adc_channel_index = (adc_channel_index + 1) % 4;
     /* USER CODE END WHILE */
@@ -401,7 +405,7 @@ static void MX_I2C1_Init(void)
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
   hi2c1.Init.Timing = 0x2010091A;
-  hi2c1.Init.OwnAddress1 = 32;
+  hi2c1.Init.OwnAddress1 = 96;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -586,7 +590,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : I2C_ADDR_Pin */
   GPIO_InitStruct.Pin = I2C_ADDR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(I2C_ADDR_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA11 */
