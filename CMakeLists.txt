@@ -80,28 +80,3 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
     COMMENT "Generating binary file: ${CMAKE_PROJECT_NAME}.bin"
 )
-
-# Determine Python command based on environment (can be overridden via env var or CMake var)
-if(NOT DEFINED CLOAD_SCRIPT)
-    if(DEFINED ENV{CLOAD_SCRIPT})
-        separate_arguments(CLOAD_SCRIPT NATIVE_COMMAND "$ENV{CLOAD_SCRIPT}")
-    elseif(DEFINED ENV{WSL_DISTRO_NAME})
-        set(CLOAD_SCRIPT "python.exe;-m;cfloader")
-    else()
-        find_package(Python3 COMPONENTS Interpreter)
-        if(Python3_FOUND)
-            set(CLOAD_SCRIPT "${Python3_EXECUTABLE};-m;cfloader")
-        else()
-            set(CLOAD_SCRIPT "python3;-m;cfloader")
-        endif()
-    endif()
-endif()
-
-# Add custom target to flash using cfloader (radio bootloader)
-add_custom_target(cload
-    COMMAND ${CLOAD_SCRIPT} flash ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin deck-bcColorLED:color-fw
-    DEPENDS ${CMAKE_PROJECT_NAME}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Flashing ${CMAKE_PROJECT_NAME}.bin using cfloader (radio bootloader)"
-    VERBATIM
-)
