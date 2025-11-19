@@ -21,7 +21,13 @@ This will generate the firmware binary at `build/Release/color-led.elf`.
 
 ## Flashing
 
-Once built, flash the firmware to the board using probe-rs:
+Once built, flash the firmware to the board using the Crazyradio:
+
+```bash
+cmake --build build/Release --target cload
+```
+
+Or with a debugger using probe-rs:
 
 ```bash
 probe-rs download --chip stm32c011f6ux build/Release/color-led.elf
