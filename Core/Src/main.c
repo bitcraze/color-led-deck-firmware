@@ -184,7 +184,7 @@ int main(void)
   cached_led_position = detectLedPosition();
 
   // Read I2C_ADDR pin (PC15) to determine I2C address
-  // Inverted logic: LOW (pulled down by Crazyflie) = alternate address 0x19
+  // HIGH (pulled up by Crazyflie) = use alternate address 0x31
   if (HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin) == GPIO_PIN_SET)
   {
     uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (96 -> 98, i.e. 0x30<<1 -> 0x31<<1)
