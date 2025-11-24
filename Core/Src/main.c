@@ -187,7 +187,7 @@ int main(void)
   // Inverted logic: LOW (pulled down by Crazyflie) = alternate address 0x19
   if (HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin) == GPIO_PIN_SET)
   {
-    uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (48 -> 50, i.e. 0x18 -> 0x19)
+    uint8_t i2c_address = I2C_BASE_ADDRESS + 2;  // Increment to next address (96 -> 98, i.e. 0x30<<1 -> 0x31<<1)
 
     // Reconfigure I2C with new address
     HAL_I2C_DeInit(&hi2c1);
