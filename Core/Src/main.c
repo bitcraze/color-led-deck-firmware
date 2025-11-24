@@ -663,8 +663,20 @@ static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_
 }
 
 /**
-  * @brief  Detect LED position based on PA12 pin state
-  * @retval LED position (LED_POS_NONE, LED_POS_BOTTOM, LED_POS_TOP)
+  * @brief  Detect LED position based on PA12 pin state using pull-up/pull-down detection
+  *
+  * This function determines the presence and orientation of the LED by testing the PA12 pin
+  * with both pull-down and pull-up configurations:
+  *   - First, the pin is read with a pull-down resistor. If the pin reads LOW, it may be floating
+  *     (no LED mounted) or actively driven LOW (bottom-facing LED).
+  *   - To distinguish, the pin is then read with a pull-up resistor. If the pin reads HIGH, it was
+  *     floating (no LED mounted). If it remains LOW, it is actively driven LOW (bottom-facing LED).
+  *   - If the initial pull-down read is HIGH, the pin is actively driven HIGH (top-facing LED).
+  *
+  * @retval LED position:
+  *   - LED_POS_NONE   : No LED mounted (pin floating)
+  *   - LED_POS_BOTTOM : Bottom-facing LED (pin driven LOW)
+  *   - LED_POS_TOP    : Top-facing LED (pin driven HIGH)
   */
 static uint8_t detectLedPosition(void) {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
