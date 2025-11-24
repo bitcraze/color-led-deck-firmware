@@ -281,9 +281,6 @@ int main(void)
       case 1: if (readADCChannel8bit(ADC_CHANNEL_5, &value)) cached_led_current[1] = value; break;  // PA5 - CURR_G
       case 2: if (readADCChannel8bit(ADC_CHANNEL_6, &value)) cached_led_current[2] = value; break;  // PA6 - CURR_B
       case 3: if (readADCChannel8bit(ADC_CHANNEL_7, &value)) cached_led_current[3] = value; break;  // PA7 - CURR_W
-      default:
-        adc_channel_index = 0;
-        break;
     }
     adc_channel_index = (adc_channel_index + 1) % 4;
     /* USER CODE END WHILE */
