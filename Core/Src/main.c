@@ -233,6 +233,8 @@ int main(void)
   // R: 268435456, G: 1048576, B: 4096, W: 16
   // R: 4278190080, G: 16711680, B: 65280, W: 255
 
+  uint32_t next_loop_tick = HAL_GetTick();
+
   while (1)
   {
     rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
@@ -267,8 +269,14 @@ int main(void)
     //   TIM1->CCR3 = topLedB;
     //   TIM1->CCR4 = topLedW;
     // }
-    
-    HAL_Delay(1);
+
+    // Maintain consistent 1ms loop timing
+    next_loop_tick += 1;
+    uint32_t current_tick = HAL_GetTick();
+    if (next_loop_tick > current_tick) {
+      HAL_Delay(next_loop_tick - current_tick);
+    }
+    // If loop took longer than 1ms, next_loop_tick will be in the past and we skip the delay
 
     // Update cached ADC readings for LED current monitoring (round-robin)
     // Reading in main loop avoids blocking I2C interrupts
