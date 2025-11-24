@@ -24,7 +24,9 @@ This will generate the firmware binary at `build/Release/color-led.elf`.
 Once built, flash the firmware to the board using the Crazyradio and `cfloader`:
 
 ```bash
-cfloader flash build/Release/color-led.bin deck-bcColorLED:color-fw -w radio://0/80/2M/E7E7E7E7E7
+cfloader flash build/Release/color-led.bin deck-bcColorLEDBot:col-fw -w radio://0/80/2M/E7E7E7E7E7
+# or
+cfloader flash build/Release/color-led.bin deck-bcColorLEDTop:col-fw -w radio://0/80/2M/E7E7E7E7E7
 ```
 
 Or with a debugger using probe-rs:
