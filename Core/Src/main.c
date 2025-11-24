@@ -273,16 +273,24 @@ int main(void)
     // Update cached ADC readings for LED current monitoring (round-robin)
     // Reading in main loop avoids blocking I2C interrupts
     // Only read one channel per iteration to keep loop fast
+    // Reduce frequency to avoid excessive overhead - only read every 16 iterations
     static uint8_t adc_channel_index = 0;
+    static uint8_t adc_read_divider = 0;
     uint8_t value;
 
-    switch(adc_channel_index) {
-      case 0: if (readADCChannel8bit(ADC_CHANNEL_4, &value)) cached_led_current[0] = value; break;  // PA4 - CURR_R
-      case 1: if (readADCChannel8bit(ADC_CHANNEL_5, &value)) cached_led_current[1] = value; break;  // PA5 - CURR_G
-      case 2: if (readADCChannel8bit(ADC_CHANNEL_6, &value)) cached_led_current[2] = value; break;  // PA6 - CURR_B
-      case 3: if (readADCChannel8bit(ADC_CHANNEL_7, &value)) cached_led_current[3] = value; break;  // PA7 - CURR_W
+    // Only read ADC every 16 loop iterations (~16ms with 1ms loop delay)
+    // This results in each channel being updated every ~64ms, which is reasonable for production monitoring
+    if (++adc_read_divider >= 16) {
+      adc_read_divider = 0;
+
+      switch(adc_channel_index) {
+        case 0: if (readADCChannel8bit(ADC_CHANNEL_4, &value)) cached_led_current[0] = value; break;  // PA4 - CURR_R
+        case 1: if (readADCChannel8bit(ADC_CHANNEL_5, &value)) cached_led_current[1] = value; break;  // PA5 - CURR_G
+        case 2: if (readADCChannel8bit(ADC_CHANNEL_6, &value)) cached_led_current[2] = value; break;  // PA6 - CURR_B
+        case 3: if (readADCChannel8bit(ADC_CHANNEL_7, &value)) cached_led_current[3] = value; break;  // PA7 - CURR_W
+      }
+      adc_channel_index = (adc_channel_index + 1) % 4;
     }
-    adc_channel_index = (adc_channel_index + 1) % 4;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
