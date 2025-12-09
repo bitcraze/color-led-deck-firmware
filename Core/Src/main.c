@@ -786,6 +786,12 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
       }
       break;
 
+    case CMD_GET_I2C_ADDR_PIN:
+      // Prepare I2C address pin state response
+      aTxBuffer[0] = CMD_GET_I2C_ADDR_PIN;
+      aTxBuffer[1] = HAL_GPIO_ReadPin(I2C_ADDR_GPIO_Port, I2C_ADDR_Pin);
+      break;
+
     default:
       // Unknown command - ignore
       break;
