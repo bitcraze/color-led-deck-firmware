@@ -94,7 +94,7 @@ static float readTemperature(void) {
     uint16_t vrefMillivolts = __LL_ADC_CALC_VREFANALOG_VOLTAGE(vrefRaw, LL_ADC_RESOLUTION_12B);
 
     float vSenseMv = (float)tempRaw * (float)vrefMillivolts / ADC_12BIT_MAX_VALUE;
-    float v30Mv = (float)(*TEMPSENSOR_CAL1_ADDR) * (float)vrefMillivolts / ADC_12BIT_MAX_VALUE;
+    float v30Mv = (float)(*TEMPSENSOR_CAL1_ADDR) * TEMPSENSOR_CAL_VREFANALOG / ADC_12BIT_MAX_VALUE;
     float avgSlopeUvPerC = (float)TEMPSENSOR_AVGSLOPE_UV_PER_C;
 
     float temperatureCelsius = ((vSenseMv - v30Mv) * 1000.0f / avgSlopeUvPerC) + TEMPSENSOR_CAL1_TEMP_C;
