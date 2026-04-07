@@ -240,8 +240,8 @@ int main(void)
   while (1)
   {
     if (i2c_needs_recovery) {
-      i2c_needs_recovery = false;
       I2C_Recover();
+      i2c_needs_recovery = false;
     }
 
     rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
