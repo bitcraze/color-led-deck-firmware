@@ -53,6 +53,7 @@ uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
 static rgbw_t requested_color = {0, 0, 0, 0};
 static uint8_t cached_led_position = LED_POS_NONE;  // Cached LED position detected at startup
 static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R, G, B, W]
+static volatile bool i2c_needs_recovery = false;
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -88,6 +89,7 @@ static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
+static void I2C_Recover(void);
 static uint8_t detectLedPosition(void);
 static bool readADCChannel8bit(uint32_t channel, uint8_t *result);
 static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_milliohms);
@@ -237,6 +239,11 @@ int main(void)
 
   while (1)
   {
+    if (i2c_needs_recovery) {
+      I2C_Recover();
+      i2c_needs_recovery = false;
+    }
+
     rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
 
     // Rev.A
@@ -626,6 +633,21 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /**
+  * @brief  Recover I2C peripheral from error state
+  *         Re-initializes the peripheral and re-enables listen mode.
+  *         The hi2c1.Init struct (including OwnAddress1) survives DeInit,
+  *         so the correct address is preserved.
+  */
+static void I2C_Recover(void)
+{
+  HAL_I2C_DeInit(&hi2c1);
+  HAL_I2C_Init(&hi2c1);
+  HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE);
+  HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0);
+  HAL_I2C_EnableListen_IT(&hi2c1);
+}
+
+/**
   * @brief  Read ADC channel value
   * @param  channel: ADC channel to read
   * @param  result: Pointer to store 8-bit ADC value (scaled from 12-bit)
@@ -812,8 +834,8 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
   {
     if (HAL_I2C_Slave_Seq_Receive_IT(&hi2c1, (uint8_t *)aRxBuffer, RXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
     {
-      /* Transfer error in reception process */
-      Error_Handler();
+      i2c_needs_recovery = true;
+      return;
     }
   }
   else
@@ -821,7 +843,8 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
     // Master is reading from us - send the prepared response
     if (HAL_I2C_Slave_Seq_Transmit_IT(&hi2c1, aTxBuffer, TXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
     {
-      Error_Handler();
+      i2c_needs_recovery = true;
+      return;
     }
   }
 }
@@ -852,9 +875,10 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *I2cHandle)
     */
   if (HAL_I2C_GetError(I2cHandle) != HAL_I2C_ERROR_AF)
   {
-    Error_Handler();
+    i2c_needs_recovery = true;
+    return;
   }
-  
+
   HAL_I2C_EnableListen_IT(&hi2c1);
 }
 /* USER CODE END 4 */
