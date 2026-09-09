@@ -29,7 +29,7 @@
 #define VERSION_H
 
 // Protocol version - increment when changing I2C command format
-#define COLOR_LED_PROTOCOL_VERSION 3
+#define COLOR_LED_PROTOCOL_VERSION 4
 
 #define RXBUFFERSIZE  9  // CMD (1) + W,R,G,B (4) + fade time float32 (4)
 #define TXBUFFERSIZE  9  // CMD (1) + 4 × uint16_t current values (8)
