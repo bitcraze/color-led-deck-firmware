@@ -37,6 +37,7 @@
 #include "thermal_control.h"
 #include "protocol.h"
 #include <stdbool.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -108,10 +109,15 @@ static rgbw_t applyBrightnessCorrection(rgbw_t input) {
     return out;
 }
 
-// Raw target color as received from the master, and the corrected color
-// actually displayed. Kept separate so toggling brightness correction can
-// recompute the display color without needing a new CMD_SET_COLOR.
-static rgbw_t raw_color = {0, 0, 0, 0};
+// Fade state, all in raw (pre-correction) space. current_raw_color is
+// recomputed every main loop tick and is both what gets corrected for
+// display and the start point captured the next time the target changes.
+static rgbw_t initial_color = {0, 0, 0, 0};
+static rgbw_t target_color = {0, 0, 0, 0};
+static rgbw_t current_raw_color = {0, 0, 0, 0};
+static float tFade = 0.0f;
+static float tFadeRemaining = 0.0f;
+
 static rgbw_t display_color = {0, 0, 0, 0};
 static bool brightness_corr_enabled = true;
 
@@ -331,6 +337,23 @@ int main(void)
       I2C_Recover();
       i2c_needs_recovery = false;
     }
+
+    // Main loop runs at a fixed ~1ms cadence (see loop timing below)
+    if (tFadeRemaining > 0.0f) {
+      float alpha = tFadeRemaining / tFade;
+
+      current_raw_color.w = (uint8_t)(alpha * initial_color.w + (1.0f - alpha) * target_color.w);
+      current_raw_color.r = (uint8_t)(alpha * initial_color.r + (1.0f - alpha) * target_color.r);
+      current_raw_color.g = (uint8_t)(alpha * initial_color.g + (1.0f - alpha) * target_color.g);
+      current_raw_color.b = (uint8_t)(alpha * initial_color.b + (1.0f - alpha) * target_color.b);
+
+      tFadeRemaining -= 0.001f;
+    } else {
+      tFadeRemaining = 0.0f;
+      current_raw_color = target_color;
+    }
+
+    display_color = brightness_corr_enabled ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
 
     rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
@@ -844,22 +867,33 @@ static uint8_t detectLedPosition(void) {
   */
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 {
-  // Fixed packet size: always 5 bytes (CMD + 4 data bytes)
+  // Fixed packet size: always 9 bytes (CMD + 8 data bytes)
   uint8_t cmd = aRxBuffer[0];
 
   switch(cmd) {
     case CMD_SET_COLOR:
-      raw_color.w = aRxBuffer[1]; //White
-      raw_color.r = aRxBuffer[2]; //Red
-      raw_color.g = aRxBuffer[3]; //Green
-      raw_color.b = aRxBuffer[4]; //Blue
+      {
+        rgbw_t target = {
+          .w = aRxBuffer[1], //White
+          .r = aRxBuffer[2], //Red
+          .g = aRxBuffer[3], //Green
+          .b = aRxBuffer[4]  //Blue
+        };
+        float fadeTime;
+        memcpy(&fadeTime, &aRxBuffer[5], sizeof(float));
 
-      display_color = brightness_corr_enabled ? applyBrightnessCorrection(raw_color) : raw_color;
+        if (target.w != target_color.w || target.r != target_color.r ||
+            target.g != target_color.g || target.b != target_color.b) {
+          initial_color = current_raw_color;
+          target_color = target;
+          tFade = fadeTime;
+          tFadeRemaining = fadeTime;
+        }
+      }
       break;
 
     case CMD_SET_BRIGHTNESS_CORR:
       brightness_corr_enabled = aRxBuffer[1] != 0;
-      display_color = brightness_corr_enabled ? applyBrightnessCorrection(raw_color) : raw_color;
       break;
 
     case CMD_GET_VERSION:
