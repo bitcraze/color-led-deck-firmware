@@ -118,6 +118,18 @@ static rgbw_t current_raw_color = {0, 0, 0, 0};
 static float tFade = 0.0f;
 static float tFadeRemaining = 0.0f;
 
+// Blink state. Scales the (post-fade, pre-correction) raw color by an
+// intensity envelope: hold at intMax for dutyMax/255 of the period, ramp
+// down, hold at intMin for dutyMin/255 of the period, ramp back up.
+// blinkFreq == 0 disables blinking (intensity stays pinned at 255).
+static uint8_t blinkDutyMax = 0;
+static uint8_t blinkDutyMin = 0;
+static uint8_t blinkIntMax = 255;
+static uint8_t blinkIntMin = 0;
+static float blinkFreq = 0.0f;
+static float blinkCycleTime = 0.0f;
+static uint8_t blinkIntensity = 255;
+
 static rgbw_t display_color = {0, 0, 0, 0};
 static bool brightness_corr_enabled = true;
 
@@ -353,7 +365,39 @@ int main(void)
       current_raw_color = target_color;
     }
 
-    display_color = brightness_corr_enabled ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
+    if (blinkFreq > 0.0f) {
+      blinkCycleTime += 0.001f * blinkFreq;
+      if (blinkCycleTime >= 1.0f) {
+        blinkCycleTime -= 1.0f;
+      }
+
+      float blinkDutyTrans = (255.0f - blinkDutyMax - blinkDutyMin) / 2.0f;
+      if (blinkCycleTime < blinkDutyMax / 255.0f) {
+        // Max intensity
+        blinkIntensity = blinkIntMax;
+      } else if (blinkCycleTime < (blinkDutyMax + blinkDutyTrans) / 255.0f) {
+        // Falling edge
+        blinkIntensity = (uint8_t)(blinkIntMax - (blinkIntMax - blinkIntMin) * (blinkCycleTime * 255.0f - blinkDutyMax) / blinkDutyTrans);
+      } else if (blinkCycleTime < (blinkDutyMax + blinkDutyTrans + blinkDutyMin) / 255.0f) {
+        // Min intensity
+        blinkIntensity = blinkIntMin;
+      } else {
+        // Rising edge
+        blinkIntensity = (uint8_t)(blinkIntMin + (blinkIntMax - blinkIntMin) * (blinkCycleTime * 255.0f - (blinkDutyMax + blinkDutyTrans + blinkDutyMin)) / blinkDutyTrans);
+      }
+    } else {
+      blinkCycleTime = 0.0f;
+      blinkIntensity = 255;
+    }
+
+    rgbw_t blinked_raw_color = {
+      .w = (uint8_t)(current_raw_color.w * blinkIntensity / 255.0f),
+      .r = (uint8_t)(current_raw_color.r * blinkIntensity / 255.0f),
+      .g = (uint8_t)(current_raw_color.g * blinkIntensity / 255.0f),
+      .b = (uint8_t)(current_raw_color.b * blinkIntensity / 255.0f),
+    };
+
+    display_color = brightness_corr_enabled ? applyBrightnessCorrection(blinked_raw_color) : blinked_raw_color;
 
     rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
@@ -894,6 +938,14 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 
     case CMD_SET_BRIGHTNESS_CORR:
       brightness_corr_enabled = aRxBuffer[1] != 0;
+      break;
+
+    case CMD_SET_BLINK:
+      blinkDutyMax = aRxBuffer[1];
+      blinkDutyMin = aRxBuffer[2];
+      blinkIntMax = aRxBuffer[3];
+      blinkIntMin = aRxBuffer[4];
+      memcpy(&blinkFreq, &aRxBuffer[5], sizeof(float));
       break;
 
     case CMD_GET_VERSION:
