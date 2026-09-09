@@ -50,10 +50,70 @@ __IO uint32_t     Xfer_Complete = 0;
 uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
 uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
 
-static rgbw_t requested_color = {0, 0, 0, 0};
 static uint8_t cached_led_position = LED_POS_NONE;  // Cached LED position detected at startup
 static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R, G, B, W]
 static volatile bool i2c_needs_recovery = false;
+
+// Gamma correction LUT (gamma = 2.0 with minimum threshold)
+// Input 0 -> 0 (off), Input 1-255 -> 3-255 (gamma corrected)
+// Minimum output of 3 ensures LEDs start at lowest visible level
+static const uint8_t gamma8[256] = {
+      0,   3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   4,   4,   4,   4,
+      4,   4,   4,   4,   5,   5,   5,   5,   5,   5,   6,   6,   6,   6,   6,   7,
+      7,   7,   7,   8,   8,   8,   9,   9,   9,  10,  10,  10,  11,  11,  11,  12,
+     12,  12,  13,  13,  13,  14,  14,  15,  15,  16,  16,  16,  17,  17,  18,  18,
+     19,  19,  20,  20,  21,  21,  22,  23,  23,  24,  24,  25,  25,  26,  27,  27,
+     28,  28,  29,  30,  30,  31,  32,  32,  33,  34,  34,  35,  36,  37,  37,  38,
+     39,  39,  40,  41,  42,  43,  43,  44,  45,  46,  47,  47,  48,  49,  50,  51,
+     52,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,
+     66,  67,  68,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,
+     83,  84,  86,  87,  88,  89,  90,  91,  93,  94,  95,  96,  97,  99, 100, 101,
+    102, 103, 105, 106, 107, 109, 110, 111, 112, 114, 115, 116, 118, 119, 120, 122,
+    123, 124, 126, 127, 129, 130, 131, 133, 134, 136, 137, 139, 140, 141, 143, 144,
+    146, 147, 149, 150, 152, 153, 155, 156, 158, 160, 161, 163, 164, 166, 167, 169,
+    171, 172, 174, 176, 177, 179, 180, 182, 184, 185, 187, 189, 191, 192, 194, 196,
+    197, 199, 201, 203, 204, 206, 208, 210, 212, 213, 215, 217, 219, 221, 223, 224,
+    226, 228, 230, 232, 234, 236, 238, 239, 241, 243, 245, 247, 249, 251, 253, 255
+};
+
+// Perceptual balance factors from user survey
+// These scale brightness values to achieve perceptually balanced colors
+// Blue is observed as weakest, others are scaled relative to it
+typedef struct {
+    float w, r, g, b;
+} perceptualScale_t;
+
+static const perceptualScale_t PERCEPTUAL_SCALE = {
+    .w = 0.99f,
+    .r = 0.78f,
+    .g = 0.51f,
+    .b = 1.0f
+};
+
+static rgbw_t applyBrightnessCorrection(rgbw_t input) {
+    rgbw_t scaled = {
+        .w = (uint8_t)(input.w * PERCEPTUAL_SCALE.w),
+        .r = (uint8_t)(input.r * PERCEPTUAL_SCALE.r),
+        .g = (uint8_t)(input.g * PERCEPTUAL_SCALE.g),
+        .b = (uint8_t)(input.b * PERCEPTUAL_SCALE.b),
+    };
+
+    rgbw_t out = {
+        .w = gamma8[scaled.w],
+        .r = gamma8[scaled.r],
+        .g = gamma8[scaled.g],
+        .b = gamma8[scaled.b],
+    };
+
+    return out;
+}
+
+// Raw target color as received from the master, and the corrected color
+// actually displayed. Kept separate so toggling brightness correction can
+// recompute the display color without needing a new CMD_SET_COLOR.
+static rgbw_t raw_color = {0, 0, 0, 0};
+static rgbw_t display_color = {0, 0, 0, 0};
+static bool brightness_corr_enabled = true;
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -272,7 +332,7 @@ int main(void)
       i2c_needs_recovery = false;
     }
 
-    rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
+    rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
@@ -789,10 +849,17 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 
   switch(cmd) {
     case CMD_SET_COLOR:
-      requested_color.w = aRxBuffer[1]; //White
-      requested_color.r = aRxBuffer[2]; //Red
-      requested_color.g = aRxBuffer[3]; //Green
-      requested_color.b = aRxBuffer[4]; //Blue
+      raw_color.w = aRxBuffer[1]; //White
+      raw_color.r = aRxBuffer[2]; //Red
+      raw_color.g = aRxBuffer[3]; //Green
+      raw_color.b = aRxBuffer[4]; //Blue
+
+      display_color = brightness_corr_enabled ? applyBrightnessCorrection(raw_color) : raw_color;
+      break;
+
+    case CMD_SET_BRIGHTNESS_CORR:
+      brightness_corr_enabled = aRxBuffer[1] != 0;
+      display_color = brightness_corr_enabled ? applyBrightnessCorrection(raw_color) : raw_color;
       break;
 
     case CMD_GET_VERSION:

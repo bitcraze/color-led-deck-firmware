@@ -36,11 +36,12 @@
 
 // Command types
 #define CMD_GET_VERSION         0x00  // Get protocol version
-#define CMD_SET_COLOR           0x01  // Set LED color
+#define CMD_SET_COLOR           0x01  // Set LED color (raw, pre-correction) [CMD, W, R, G, B]
 #define CMD_GET_THERMAL_STATUS  0x02  // Get thermal status
 #define CMD_GET_LED_POSITION    0x03  // Get LED mounting position
 #define CMD_GET_LED_CURRENT     0x04  // Get LED current readings
 #define CMD_GET_I2C_ADDR_PIN    0x05  // Get I2C address pin state
+#define CMD_SET_BRIGHTNESS_CORR 0x06  // Enable/disable brightness correction [CMD, enable, 0, ...]
 
 // LED position values
 #define LED_POS_NONE            0x00  // No LED / floating
