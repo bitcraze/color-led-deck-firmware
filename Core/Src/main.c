@@ -38,6 +38,7 @@
 #include "protocol.h"
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -342,6 +343,7 @@ int main(void)
   // R: 4278190080, G: 16711680, B: 65280, W: 255
 
   uint32_t next_loop_tick = HAL_GetTick();
+  uint32_t lastEffectTick = next_loop_tick;
 
   while (1)
   {
@@ -350,7 +352,13 @@ int main(void)
       i2c_needs_recovery = false;
     }
 
-    // Main loop runs at a fixed ~1ms cadence (see loop timing below)
+    uint32_t nowTick = HAL_GetTick();
+    float dt = (nowTick - lastEffectTick) / 1000.0f;
+    lastEffectTick = nowTick;
+    if (dt > 0.1f) {
+      dt = 0.1f;
+    }
+
     if (tFadeRemaining > 0.0f) {
       float alpha = tFadeRemaining / tFade;
 
@@ -359,17 +367,14 @@ int main(void)
       current_raw_color.g = (uint8_t)(alpha * initial_color.g + (1.0f - alpha) * target_color.g);
       current_raw_color.b = (uint8_t)(alpha * initial_color.b + (1.0f - alpha) * target_color.b);
 
-      tFadeRemaining -= 0.001f;
+      tFadeRemaining -= dt;
     } else {
       tFadeRemaining = 0.0f;
       current_raw_color = target_color;
     }
 
     if (blinkFreq > 0.0f) {
-      blinkCycleTime += 0.001f * blinkFreq;
-      if (blinkCycleTime >= 1.0f) {
-        blinkCycleTime -= 1.0f;
-      }
+      blinkCycleTime = fmodf(blinkCycleTime + dt * blinkFreq, 1.0f);
 
       float blinkDutyTrans = (255.0f - blinkDutyMax - blinkDutyMin) / 2.0f;
       if (blinkCycleTime < blinkDutyMax / 255.0f) {
