@@ -346,6 +346,7 @@ int main(void)
       dt = 0.1f;
     }
 
+    __disable_irq();
     if (tFadeRemaining > 0.0f) {
       float alpha = tFadeRemaining / tFade;
 
@@ -359,6 +360,7 @@ int main(void)
       tFadeRemaining = 0.0f;
       current_raw_color = target_color;
     }
+    __enable_irq();
 
     display_color = brightness_corr_enabled ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
 
@@ -891,10 +893,12 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
 
         if (target.w != target_color.w || target.r != target_color.r ||
             target.g != target_color.g || target.b != target_color.b) {
+          __disable_irq();
           initial_color = current_raw_color;
           target_color = target;
           tFade = fadeTime;
           tFadeRemaining = fadeTime;
+          __enable_irq();
         }
       }
       break;
