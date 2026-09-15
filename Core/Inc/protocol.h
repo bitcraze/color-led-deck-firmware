@@ -42,7 +42,6 @@
 #define CMD_GET_LED_CURRENT     0x04  // Get LED current readings
 #define CMD_GET_I2C_ADDR_PIN    0x05  // Get I2C address pin state
 #define CMD_SET_BRIGHTNESS_CORR 0x06  // Enable/disable brightness correction [CMD, enable, 0, ...]
-#define CMD_SET_BLINK           0x07  // Set blink envelope + frequency [CMD, dutyMax, dutyMin, intMax, intMin, freq]
 
 // LED position values
 #define LED_POS_NONE            0x00  // No LED / floating

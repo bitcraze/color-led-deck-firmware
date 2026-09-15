@@ -14,9 +14,9 @@ To set the LED color, send a 9-byte I2C command:
 uint8_t command[9] = {0x01, 0, 255, 0, 0};  // Full red
 ```
 
-Colors are raw (pre-correction) - the deck applies gamma/perceptual correction,
-fading, and blinking itself. See [I2C Protocol](../functional-areas/i2c_protocol.md)
-for the full command set.
+Colors are raw (pre-correction) - the deck applies gamma/perceptual correction and
+fading itself. See [I2C Protocol](../functional-areas/i2c_protocol.md) for the full
+command set.
 
 ## Integration Examples
 
