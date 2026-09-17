@@ -29,18 +29,23 @@
 #define VERSION_H
 
 // Protocol version - increment when changing I2C command format
-#define COLOR_LED_PROTOCOL_VERSION 3
+#define COLOR_LED_PROTOCOL_VERSION 4
 
-#define RXBUFFERSIZE  5
+#define COLOR_LED_REQUEST_SIZE 5  // Stable legacy requests, including GET_VERSION
+#define COLOR_LED_FADE_REQUEST_SIZE 9
+#define COLOR_LED_RX_CAPACITY COLOR_LED_FADE_REQUEST_SIZE
 #define TXBUFFERSIZE  9  // CMD (1) + 4 × uint16_t current values (8)
 
 // Command types
 #define CMD_GET_VERSION         0x00  // Get protocol version
-#define CMD_SET_COLOR           0x01  // Set LED color
+#define CMD_SET_COLOR           0x01  // Legacy, already corrected [CMD, W, R, G, B]
 #define CMD_GET_THERMAL_STATUS  0x02  // Get thermal status
 #define CMD_GET_LED_POSITION    0x03  // Get LED mounting position
 #define CMD_GET_LED_CURRENT     0x04  // Get LED current readings
 #define CMD_GET_I2C_ADDR_PIN    0x05  // Get I2C address pin state
+#define CMD_SET_BRIGHTNESS_CORR 0x06  // Enable/disable brightness correction [CMD, enable, 0, ...]
+
+#define CMD_SET_COLOR_FADE      0x07  // Raw [CMD, W, R, G, B, fadeSeconds(f32 LE)]
 
 // LED position values
 #define LED_POS_NONE            0x00  // No LED / floating

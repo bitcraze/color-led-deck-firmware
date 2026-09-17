@@ -36,7 +36,9 @@
 #include "color.h"
 #include "thermal_control.h"
 #include "protocol.h"
+#include "i2c_protocol.h"
 #include <stdbool.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,14 +48,75 @@ __IO uint32_t     Xfer_Complete = 0;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* Buffer used for reception */
-uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
-uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
-
-static rgbw_t requested_color = {0, 0, 0, 0};
 static uint8_t cached_led_position = LED_POS_NONE;  // Cached LED position detected at startup
 static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R, G, B, W]
-static volatile bool i2c_needs_recovery = false;
+
+// Gamma correction LUT (gamma = 2.0 with minimum threshold)
+// Input 0 -> 0 (off), Input 1-255 -> 3-255 (gamma corrected)
+// Minimum output of 3 ensures LEDs start at lowest visible level
+static const uint8_t gamma8[256] = {
+      0,   3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   3,   4,   4,   4,   4,
+      4,   4,   4,   4,   5,   5,   5,   5,   5,   5,   6,   6,   6,   6,   6,   7,
+      7,   7,   7,   8,   8,   8,   9,   9,   9,  10,  10,  10,  11,  11,  11,  12,
+     12,  12,  13,  13,  13,  14,  14,  15,  15,  16,  16,  16,  17,  17,  18,  18,
+     19,  19,  20,  20,  21,  21,  22,  23,  23,  24,  24,  25,  25,  26,  27,  27,
+     28,  28,  29,  30,  30,  31,  32,  32,  33,  34,  34,  35,  36,  37,  37,  38,
+     39,  39,  40,  41,  42,  43,  43,  44,  45,  46,  47,  47,  48,  49,  50,  51,
+     52,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,
+     66,  67,  68,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,
+     83,  84,  86,  87,  88,  89,  90,  91,  93,  94,  95,  96,  97,  99, 100, 101,
+    102, 103, 105, 106, 107, 109, 110, 111, 112, 114, 115, 116, 118, 119, 120, 122,
+    123, 124, 126, 127, 129, 130, 131, 133, 134, 136, 137, 139, 140, 141, 143, 144,
+    146, 147, 149, 150, 152, 153, 155, 156, 158, 160, 161, 163, 164, 166, 167, 169,
+    171, 172, 174, 176, 177, 179, 180, 182, 184, 185, 187, 189, 191, 192, 194, 196,
+    197, 199, 201, 203, 204, 206, 208, 210, 212, 213, 215, 217, 219, 221, 223, 224,
+    226, 228, 230, 232, 234, 236, 238, 239, 241, 243, 245, 247, 249, 251, 253, 255
+};
+
+// Perceptual balance factors from user survey
+// These scale brightness values to achieve perceptually balanced colors
+// Blue is observed as weakest, others are scaled relative to it
+typedef struct {
+    float w, r, g, b;
+} perceptualScale_t;
+
+static const perceptualScale_t PERCEPTUAL_SCALE = {
+    .w = 0.99f,
+    .r = 0.78f,
+    .g = 0.51f,
+    .b = 1.0f
+};
+
+static rgbw_t applyBrightnessCorrection(rgbw_t input) {
+    rgbw_t scaled = {
+        .w = (uint8_t)(input.w * PERCEPTUAL_SCALE.w),
+        .r = (uint8_t)(input.r * PERCEPTUAL_SCALE.r),
+        .g = (uint8_t)(input.g * PERCEPTUAL_SCALE.g),
+        .b = (uint8_t)(input.b * PERCEPTUAL_SCALE.b),
+    };
+
+    rgbw_t out = {
+        .w = gamma8[scaled.w],
+        .r = gamma8[scaled.r],
+        .g = gamma8[scaled.g],
+        .b = gamma8[scaled.b],
+    };
+
+    return out;
+}
+
+// Fade state, all in raw (pre-correction) space. current_raw_color is
+// recomputed every main loop tick and is both what gets corrected for
+// display and the start point captured the next time the target changes.
+static rgbw_t initial_color = {0, 0, 0, 0};
+static rgbw_t target_color = {0, 0, 0, 0};
+static rgbw_t current_raw_color = {0, 0, 0, 0};
+static float tFade = 0.0f;
+static float tFadeRemaining = 0.0f;
+
+static rgbw_t display_color = {0, 0, 0, 0};
+static bool brightness_corr_enabled = true;
+static bool legacy_color = false;
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -90,6 +153,7 @@ static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static void I2C_Recover(void);
+static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer);
 static uint8_t detectLedPosition(void);
 static bool readADCChannel8bit(uint32_t channel, uint8_t *result);
 static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_milliohms);
@@ -249,6 +313,7 @@ int main(void)
   TIM1->CCR3 = 0;
   TIM1->CCR4 = 0;
 
+  i2cProtocolInit(processCommand);
   if(HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK)
   {
     /* Transfer error in reception process */
@@ -264,15 +329,40 @@ int main(void)
   // R: 4278190080, G: 16711680, B: 65280, W: 255
 
   uint32_t next_loop_tick = HAL_GetTick();
+  uint32_t lastEffectTick = next_loop_tick;
 
   while (1)
   {
-    if (i2c_needs_recovery) {
+    if (i2cProtocolNeedsRecovery()) {
       I2C_Recover();
-      i2c_needs_recovery = false;
     }
 
-    rgbw_t led_color_temp_limited = thermalLimitBrightness(requested_color);
+    uint32_t nowTick = HAL_GetTick();
+    float dt = (nowTick - lastEffectTick) / 1000.0f;
+    lastEffectTick = nowTick;
+    if (dt > 0.1f) {
+      dt = 0.1f;
+    }
+
+    __disable_irq();
+    if (tFadeRemaining > 0.0f) {
+      float alpha = tFadeRemaining / tFade;
+
+      current_raw_color.w = (uint8_t)(alpha * initial_color.w + (1.0f - alpha) * target_color.w);
+      current_raw_color.r = (uint8_t)(alpha * initial_color.r + (1.0f - alpha) * target_color.r);
+      current_raw_color.g = (uint8_t)(alpha * initial_color.g + (1.0f - alpha) * target_color.g);
+      current_raw_color.b = (uint8_t)(alpha * initial_color.b + (1.0f - alpha) * target_color.b);
+
+      tFadeRemaining -= dt;
+    } else {
+      tFadeRemaining = 0.0f;
+      current_raw_color = target_color;
+    }
+    __enable_irq();
+
+    display_color = (brightness_corr_enabled && !legacy_color) ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
+
+    rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
     // Rev.A
     // TIM1->CCR1 = botLedW; //White
@@ -669,6 +759,7 @@ static void MX_GPIO_Init(void)
 static void I2C_Recover(void)
 {
   HAL_I2C_DeInit(&hi2c1);
+  i2cProtocolReset();
   HAL_I2C_Init(&hi2c1);
   HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE);
   HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0);
@@ -776,23 +867,50 @@ static uint8_t detectLedPosition(void) {
 }
 
 /**
-  * @brief  Rx Transfer completed callback.
-  * @param  I2cHandle: I2C handle
-  * @note   This example shows a simple way to report end of IT Rx transfer, and
-  *         you can add your own implementation.
-  * @retval None
+  * @brief Process a complete command in I2C interrupt context.
   */
-void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
+static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer)
 {
-  // Fixed packet size: always 5 bytes (CMD + 4 data bytes)
+  // The transport dispatches only complete requests of the command's length.
   uint8_t cmd = aRxBuffer[0];
 
   switch(cmd) {
     case CMD_SET_COLOR:
-      requested_color.w = aRxBuffer[1]; //White
-      requested_color.r = aRxBuffer[2]; //Red
-      requested_color.g = aRxBuffer[3]; //Green
-      requested_color.b = aRxBuffer[4]; //Blue
+      // Legacy values have already been corrected by the Crazyflie.
+      legacy_color = true;
+      target_color = (rgbw_t){.w = aRxBuffer[1], .r = aRxBuffer[2],
+                              .g = aRxBuffer[3], .b = aRxBuffer[4]};
+      current_raw_color = target_color;
+      tFade = 0.0f;
+      tFadeRemaining = 0.0f;
+      break;
+
+    case CMD_SET_COLOR_FADE:
+      {
+        rgbw_t target = {
+          .w = aRxBuffer[1], //White
+          .r = aRxBuffer[2], //Red
+          .g = aRxBuffer[3], //Green
+          .b = aRxBuffer[4]  //Blue
+        };
+        float fadeTime;
+        memcpy(&fadeTime, &aRxBuffer[5], sizeof(float));
+
+        if (legacy_color || target.w != target_color.w || target.r != target_color.r ||
+            target.g != target_color.g || target.b != target_color.b) {
+          __disable_irq();
+          legacy_color = false;
+          initial_color = current_raw_color;
+          target_color = target;
+          tFade = fadeTime;
+          tFadeRemaining = fadeTime;
+          __enable_irq();
+        }
+      }
+      break;
+
+    case CMD_SET_BRIGHTNESS_CORR:
+      brightness_corr_enabled = aRxBuffer[1] != 0;
       break;
 
     case CMD_GET_VERSION:
@@ -848,67 +966,6 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
   }
 }
 
-/**
-  * @brief  Slave Address Match callback.
-  * @param  hi2c Pointer to a I2C_HandleTypeDef structure that contains
-  *                the configuration information for the specified I2C.
-  * @param  TransferDirection: Master request Transfer Direction (Write/Read), value of @ref I2C_XferOptions_definition
-  * @param  AddrMatchCode: Address Match Code
-  * @retval None
-  */
-void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
-{
-  if (TransferDirection == I2C_DIRECTION_TRANSMIT)
-  {
-    if (HAL_I2C_Slave_Seq_Receive_IT(&hi2c1, (uint8_t *)aRxBuffer, RXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
-    {
-      i2c_needs_recovery = true;
-      return;
-    }
-  }
-  else
-  {
-    // Master is reading from us - send the prepared response
-    if (HAL_I2C_Slave_Seq_Transmit_IT(&hi2c1, aTxBuffer, TXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
-    {
-      i2c_needs_recovery = true;
-      return;
-    }
-  }
-}
-
-/**
-  * @brief  Listen Complete callback.
-  * @param  hi2c Pointer to a I2C_HandleTypeDef structure that contains
-  *                the configuration information for the specified I2C.
-  * @retval None
-  */
-void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-  HAL_I2C_EnableListen_IT(hi2c);
-}
-
-/**
-  * @brief  I2C error callbacks.
-  * @param  I2cHandle: I2C handle
-  * @note   This example shows a simple way to report transfer error, and you can
-  *         add your own implementation.
-  * @retval None
-  */
-void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *I2cHandle)
-{
-  /** Error_Handler() function is called when error occurs.
-    * 1- When Slave doesn't acknowledge its address, Master restarts communication.
-    * 2- When Master doesn't acknowledge the last data transferred, Slave doesn't care in this example.
-    */
-  if (HAL_I2C_GetError(I2cHandle) != HAL_I2C_ERROR_AF)
-  {
-    i2c_needs_recovery = true;
-    return;
-  }
-
-  HAL_I2C_EnableListen_IT(&hi2c1);
-}
 /* USER CODE END 4 */
 
 /**

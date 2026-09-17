@@ -8,15 +8,12 @@ LED controller firmware for the Color LED expansion deck designed for the [Crazy
 ## Highlights
 
 - **Safety-first design** - Hardware thermal protection prevents damage through automatic brightness throttling
-- **Simple I2C protocol** - Three commands: get version, set color, check thermal status
-- **Building blocks philosophy** - Provides core capabilities; users implement their own LED patterns and control logic
+- **Simple I2C protocol** - Command-sized I2C interface for color, fade, and status queries
 
 ## Overview
 
-This firmware handles RGBW LED control with built-in thermal protection. It follows a "building blocks" approach:
-- **What it does**: Thermal monitoring, safe LED driving, I2C communication
-- **What it doesn't do**: Animation patterns, color effects, coordination logic
-
-Applications and choreography belong in the Crazyflie firmware or client applications.
+This firmware handles RGBW LED control with built-in thermal protection, brightness
+correction, and on-device color fading, driven over a simple I2C interface from the
+Crazyflie.
 
 {% sub_page_menu %}
