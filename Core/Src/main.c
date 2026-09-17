@@ -36,6 +36,7 @@
 #include "color.h"
 #include "thermal_control.h"
 #include "protocol.h"
+#include "i2c_protocol.h"
 #include <stdbool.h>
 #include <string.h>
 /* USER CODE END Includes */
@@ -47,13 +48,8 @@ __IO uint32_t     Xfer_Complete = 0;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* Buffer used for reception */
-uint8_t aRxBuffer[RXBUFFERSIZE] = {0};
-uint8_t aTxBuffer[TXBUFFERSIZE] = {0xAA, 0xBB};
-
 static uint8_t cached_led_position = LED_POS_NONE;  // Cached LED position detected at startup
 static uint8_t cached_led_current[4] = {0, 0, 0, 0};  // Cached ADC readings [R, G, B, W]
-static volatile bool i2c_needs_recovery = false;
 
 // Gamma correction LUT (gamma = 2.0 with minimum threshold)
 // Input 0 -> 0 (off), Input 1-255 -> 3-255 (gamma corrected)
@@ -120,6 +116,7 @@ static float tFadeRemaining = 0.0f;
 
 static rgbw_t display_color = {0, 0, 0, 0};
 static bool brightness_corr_enabled = true;
+static bool legacy_color = false;
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -156,6 +153,7 @@ static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static void I2C_Recover(void);
+static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer);
 static uint8_t detectLedPosition(void);
 static bool readADCChannel8bit(uint32_t channel, uint8_t *result);
 static uint16_t convertAdcToMilliamps(uint8_t adc_8bit, uint16_t sense_resistor_milliohms);
@@ -315,6 +313,7 @@ int main(void)
   TIM1->CCR3 = 0;
   TIM1->CCR4 = 0;
 
+  i2cProtocolInit(processCommand);
   if(HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK)
   {
     /* Transfer error in reception process */
@@ -334,9 +333,8 @@ int main(void)
 
   while (1)
   {
-    if (i2c_needs_recovery) {
+    if (i2cProtocolNeedsRecovery()) {
       I2C_Recover();
-      i2c_needs_recovery = false;
     }
 
     uint32_t nowTick = HAL_GetTick();
@@ -362,7 +360,7 @@ int main(void)
     }
     __enable_irq();
 
-    display_color = brightness_corr_enabled ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
+    display_color = (brightness_corr_enabled && !legacy_color) ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
 
     rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
@@ -761,6 +759,7 @@ static void MX_GPIO_Init(void)
 static void I2C_Recover(void)
 {
   HAL_I2C_DeInit(&hi2c1);
+  i2cProtocolReset();
   HAL_I2C_Init(&hi2c1);
   HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE);
   HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0);
@@ -868,19 +867,25 @@ static uint8_t detectLedPosition(void) {
 }
 
 /**
-  * @brief  Rx Transfer completed callback.
-  * @param  I2cHandle: I2C handle
-  * @note   This example shows a simple way to report end of IT Rx transfer, and
-  *         you can add your own implementation.
-  * @retval None
+  * @brief Process a complete command in I2C interrupt context.
   */
-void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
+static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer)
 {
-  // Fixed packet size: always 9 bytes (CMD + 8 data bytes)
+  // The transport dispatches only complete requests of the command's length.
   uint8_t cmd = aRxBuffer[0];
 
   switch(cmd) {
     case CMD_SET_COLOR:
+      // Legacy values have already been corrected by the Crazyflie.
+      legacy_color = true;
+      target_color = (rgbw_t){.w = aRxBuffer[1], .r = aRxBuffer[2],
+                              .g = aRxBuffer[3], .b = aRxBuffer[4]};
+      current_raw_color = target_color;
+      tFade = 0.0f;
+      tFadeRemaining = 0.0f;
+      break;
+
+    case CMD_SET_COLOR_FADE:
       {
         rgbw_t target = {
           .w = aRxBuffer[1], //White
@@ -891,9 +896,10 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
         float fadeTime;
         memcpy(&fadeTime, &aRxBuffer[5], sizeof(float));
 
-        if (target.w != target_color.w || target.r != target_color.r ||
+        if (legacy_color || target.w != target_color.w || target.r != target_color.r ||
             target.g != target_color.g || target.b != target_color.b) {
           __disable_irq();
+          legacy_color = false;
           initial_color = current_raw_color;
           target_color = target;
           tFade = fadeTime;
@@ -960,67 +966,6 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *I2cHandle)
   }
 }
 
-/**
-  * @brief  Slave Address Match callback.
-  * @param  hi2c Pointer to a I2C_HandleTypeDef structure that contains
-  *                the configuration information for the specified I2C.
-  * @param  TransferDirection: Master request Transfer Direction (Write/Read), value of @ref I2C_XferOptions_definition
-  * @param  AddrMatchCode: Address Match Code
-  * @retval None
-  */
-void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
-{
-  if (TransferDirection == I2C_DIRECTION_TRANSMIT)
-  {
-    if (HAL_I2C_Slave_Seq_Receive_IT(&hi2c1, (uint8_t *)aRxBuffer, RXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
-    {
-      i2c_needs_recovery = true;
-      return;
-    }
-  }
-  else
-  {
-    // Master is reading from us - send the prepared response
-    if (HAL_I2C_Slave_Seq_Transmit_IT(&hi2c1, aTxBuffer, TXBUFFERSIZE, I2C_FIRST_AND_LAST_FRAME) != HAL_OK)
-    {
-      i2c_needs_recovery = true;
-      return;
-    }
-  }
-}
-
-/**
-  * @brief  Listen Complete callback.
-  * @param  hi2c Pointer to a I2C_HandleTypeDef structure that contains
-  *                the configuration information for the specified I2C.
-  * @retval None
-  */
-void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-  HAL_I2C_EnableListen_IT(hi2c);
-}
-
-/**
-  * @brief  I2C error callbacks.
-  * @param  I2cHandle: I2C handle
-  * @note   This example shows a simple way to report transfer error, and you can
-  *         add your own implementation.
-  * @retval None
-  */
-void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *I2cHandle)
-{
-  /** Error_Handler() function is called when error occurs.
-    * 1- When Slave doesn't acknowledge its address, Master restarts communication.
-    * 2- When Master doesn't acknowledge the last data transferred, Slave doesn't care in this example.
-    */
-  if (HAL_I2C_GetError(I2cHandle) != HAL_I2C_ERROR_AF)
-  {
-    i2c_needs_recovery = true;
-    return;
-  }
-
-  HAL_I2C_EnableListen_IT(&hi2c1);
-}
 /* USER CODE END 4 */
 
 /**

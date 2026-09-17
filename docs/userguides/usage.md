@@ -10,8 +10,8 @@ The firmware provides a minimal I2C protocol for controlling RGBW LEDs with buil
 To set the LED color, send a 9-byte I2C command:
 
 ```c
-// Command format: [CMD_SET_COLOR, W, R, G, B, fadeSeconds (float32, little-endian)]
-uint8_t command[9] = {0x01, 0, 255, 0, 0};  // Full red
+// Command format: [CMD_SET_COLOR_FADE, W, R, G, B, fadeSeconds (float32, little-endian)]
+uint8_t command[9] = {0x07, 0, 255, 0, 0};  // Full red
 ```
 
 Colors are raw (pre-correction) - the deck applies gamma/perceptual correction and

@@ -49,6 +49,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/main.c
+    Core/Src/i2c_protocol.c
     Core/Src/thermal_control.c
     Core/Src/stm32c0xx_it.c
     Core/Src/stm32c0xx_hal_msp.c
