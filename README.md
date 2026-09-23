@@ -5,8 +5,7 @@ LED controller firmware for the Color LED expansion deck designed for the [Crazy
 ## Highlights
 
 - **Safety-first design** - Hardware thermal protection prevents damage through automatic brightness throttling
-- **Simple I2C protocol** - Three commands: get version, set color, check thermal status
-- **Building blocks philosophy** - Provides core capabilities; users implement their own LED patterns and control logic
+- **Simple I2C protocol** - Command-sized I2C interface for color, fade, and status queries
 
 ## Getting Started
 
