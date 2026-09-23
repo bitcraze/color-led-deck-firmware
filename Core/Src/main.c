@@ -116,7 +116,6 @@ static float tFadeRemaining = 0.0f;
 
 static rgbw_t display_color = {0, 0, 0, 0};
 static bool brightness_corr_enabled = true;
-static bool legacy_color = false;
 
 // I2C address configuration
 // Note: OwnAddress1 uses 8-bit format (7-bit address << 1)
@@ -360,7 +359,7 @@ int main(void)
     }
     __enable_irq();
 
-    display_color = (brightness_corr_enabled && !legacy_color) ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
+    display_color = brightness_corr_enabled ? applyBrightnessCorrection(current_raw_color) : current_raw_color;
 
     rgbw_t led_color_temp_limited = thermalLimitBrightness(display_color);
 
@@ -875,16 +874,6 @@ static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer)
   uint8_t cmd = aRxBuffer[0];
 
   switch(cmd) {
-    case CMD_SET_COLOR:
-      // Legacy values have already been corrected by the Crazyflie.
-      legacy_color = true;
-      target_color = (rgbw_t){.w = aRxBuffer[1], .r = aRxBuffer[2],
-                              .g = aRxBuffer[3], .b = aRxBuffer[4]};
-      current_raw_color = target_color;
-      tFade = 0.0f;
-      tFadeRemaining = 0.0f;
-      break;
-
     case CMD_SET_COLOR_FADE:
       {
         rgbw_t target = {
@@ -896,10 +885,9 @@ static void processCommand(const uint8_t *aRxBuffer, uint8_t *aTxBuffer)
         float fadeTime;
         memcpy(&fadeTime, &aRxBuffer[5], sizeof(float));
 
-        if (legacy_color || target.w != target_color.w || target.r != target_color.r ||
+        if (target.w != target_color.w || target.r != target_color.r ||
             target.g != target_color.g || target.b != target_color.b) {
           __disable_irq();
-          legacy_color = false;
           initial_color = current_raw_color;
           target_color = target;
           tFade = fadeTime;

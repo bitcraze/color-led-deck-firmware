@@ -31,14 +31,13 @@
 // Protocol version - increment when changing I2C command format
 #define COLOR_LED_PROTOCOL_VERSION 4
 
-#define COLOR_LED_REQUEST_SIZE 5  // Stable legacy requests, including GET_VERSION
+#define COLOR_LED_REQUEST_SIZE 5  // Stable short requests, including GET_VERSION
 #define COLOR_LED_FADE_REQUEST_SIZE 9
 #define COLOR_LED_RX_CAPACITY COLOR_LED_FADE_REQUEST_SIZE
 #define TXBUFFERSIZE  9  // CMD (1) + 4 × uint16_t current values (8)
 
 // Command types
 #define CMD_GET_VERSION         0x00  // Get protocol version
-#define CMD_SET_COLOR           0x01  // Legacy, already corrected [CMD, W, R, G, B]
 #define CMD_GET_THERMAL_STATUS  0x02  // Get thermal status
 #define CMD_GET_LED_POSITION    0x03  // Get LED mounting position
 #define CMD_GET_LED_CURRENT     0x04  // Get LED current readings

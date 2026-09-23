@@ -52,8 +52,7 @@ static void dispatch(const uint8_t *request, uint8_t *response)
   calls++;
   size_t length = request[0] == CMD_SET_COLOR_FADE ? 9 : 5;
   memcpy(command, request, length);
-  if (request[0] != CMD_SET_COLOR && request[0] != CMD_SET_COLOR_FADE &&
-      request[0] != CMD_SET_BRIGHTNESS_CORR) {
+  if (request[0] != CMD_SET_COLOR_FADE && request[0] != CMD_SET_BRIGHTNESS_CORR) {
     response[0] = request[0];
     response[1] = COLOR_LED_PROTOCOL_VERSION;
   }
@@ -107,14 +106,14 @@ int main(void)
   assert(reply[0] == 0xff); // Never a fake version before a valid request.
   version();
 
-  // Every legacy operation keeps the old wire length.
-  for (uint8_t cmd = CMD_SET_COLOR; cmd <= CMD_SET_BRIGHTNESS_CORR; cmd++) {
+  // Every short query/operation keeps the same five-byte wire length.
+  for (uint8_t cmd = CMD_GET_THERMAL_STATUS; cmd <= CMD_SET_BRIGHTNESS_CORR; cmd++) {
     begin(); byte(cmd);
     assert(lengths[1] == 4);
     for (int i = 1; i <= 4; i++) byte(i);
     stop();
     assert(command[0] == cmd && command[4] == 4);
-    if (cmd == CMD_SET_COLOR || cmd == CMD_SET_BRIGHTNESS_CORR) {
+    if (cmd == CMD_SET_BRIGHTNESS_CORR) {
       readReply();
       assert(reply[0] == 0xff);
     }
@@ -140,6 +139,14 @@ int main(void)
 
   unsigned before = calls;
   begin(); byte(0xfe);
+  assert(bus.Instance->CR2 & I2C_CR2_NACK);
+  stop(); readReply();
+  assert(calls == before && reply[0] == 0xff);
+  version();
+
+  // The retired legacy SET_COLOR opcode is unknown now, not a special case.
+  before = calls;
+  begin(); byte(0x01);
   assert(bus.Instance->CR2 & I2C_CR2_NACK);
   stop(); readReply();
   assert(calls == before && reply[0] == 0xff);

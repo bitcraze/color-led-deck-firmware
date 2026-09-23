@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Command-sized I2C reception. Discovery always retains its legacy framing. */
+/* Command-sized I2C reception. Discovery always keeps its stable framing. */
 #include "i2c_protocol.h"
 #include "protocol.h"
 #include "stm32c0xx_hal.h"
@@ -50,7 +50,6 @@ static uint8_t commandLength(uint8_t command)
 {
   switch (command) {
     case CMD_GET_VERSION:
-    case CMD_SET_COLOR:
     case CMD_GET_THERMAL_STATUS:
     case CMD_GET_LED_POSITION:
     case CMD_GET_LED_CURRENT:

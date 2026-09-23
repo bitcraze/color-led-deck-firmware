@@ -12,7 +12,6 @@ are zero. Responses start with the command byte and have zero-filled unused byte
 | Command | Code | Request bytes | Description |
 |---------|------|---------------|-------------|
 | GET_VERSION | 0x00 | 5 | Returns `[CMD, protocolVersion, 0, ...]` |
-| SET_COLOR | 0x01 | 5 | Legacy `[CMD, W, R, G, B]`, instantaneous, already corrected by the sender |
 | GET_THERMAL_STATUS | 0x02 | 5 | Returns `[CMD, temp_celsius, throttle_pct, 0, ...]` |
 | GET_LED_POSITION | 0x03 | 5 | Returns `[CMD, cached_position, 0, ...]` |
 | GET_LED_CURRENT | 0x04 | 5 | Returns `[CMD, R, G, B, W]` with four big-endian uint16 currents in mA |
@@ -21,11 +20,9 @@ are zero. Responses start with the command byte and have zero-filled unused byte
 | SET_COLOR_FADE | 0x07 | 9 | `[CMD, W, R, G, B, fadeSeconds(f32)]`, raw color target and fade duration |
 
 `fadeSeconds` is a little-endian float32 in seconds. Zero means instantaneous.
-The fade command starts a new fade when the target changes, or when switching from
-legacy colors to raw colors. Brightness correction is enabled by default for raw
-colors. The legacy color command cancels a fade and bypasses deck-side correction,
-so existing senders do not have their colors corrected twice. Thermal limiting
-continues to apply to both commands.
+The fade command starts a new fade only when the target color actually changes.
+Brightness correction is enabled by default and applied on-device. Thermal
+limiting continues to apply regardless of correction or fade state.
 
 ### Stable discovery
 
@@ -43,8 +40,7 @@ read a different version and refuse normal operation while retaining its separat
 deck update path. This does not imply that old Crazyflie firmware accepts version 4.
 
 New features should use new command identifiers without changing the framing or
-meaning of existing commands. In particular, `SET_COLOR_FADE` extends the interface
-without changing the original `SET_COLOR` command.
+meaning of existing commands.
 
 ### Reception and malformed requests
 
@@ -65,7 +61,8 @@ peripheral errors request reinitialization by the main loop.
 Run `sh tests/run.sh` from the repository root. This compiles the production I2C
 callbacks against a small HAL boundary fake and runs with AddressSanitizer and
 UndefinedBehaviorSanitizer. It requires a host C compiler and both sanitizer
-runtimes. It covers the five-byte version request, legacy and extended lengths,
-truncated and unknown requests, excess data, repeated START, and recovery after
-HAL errors. It does not simulate the STM32 peripheral or electrical bus timing.
-Upgrade/downgrade order and bus recovery still require hardware validation.
+runtimes. It covers the five-byte version request, short and extended lengths,
+truncated and unknown (including retired) requests, excess data, repeated START,
+and recovery after HAL errors. It does not simulate the STM32 peripheral or
+electrical bus timing. Upgrade/downgrade order and bus recovery still require
+hardware validation.
